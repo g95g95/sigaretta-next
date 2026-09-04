@@ -1,3 +1,5 @@
+import type { RoomSettings } from "./types";
+
 /** Gli 8 prompt fissi del gioco, nell'ordine degli slot 0–7. */
 export const PROMPTS = [
   "Chi? (personaggio 1)",
@@ -11,10 +13,27 @@ export const PROMPTS = [
 ] as const;
 
 export const SLOTS = PROMPTS.length; // 8
+
+// Valori di default delle impostazioni di stanza (l'host può cambiarli in lobby).
 export const ROUND_MS = 60_000;
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 10;
 export const MAX_ANSWER_LEN = 120;
+
+export const DEFAULT_SETTINGS: RoomSettings = {
+  minPlayers: MIN_PLAYERS,
+  maxPlayers: MAX_PLAYERS,
+  roundMs: ROUND_MS,
+  maxAnswerLen: MAX_ANSWER_LEN,
+};
+
+/** Intervalli ammessi per le impostazioni: limiti duri, non modificabili dall'host. */
+export const LIMITS = {
+  players: { min: 2, max: 10 },
+  roundMs: { min: 15_000, max: 300_000, step: 5_000 },
+  answerLen: { min: 20, max: 300, step: 10 },
+} as const;
+
 export const MAX_NAME_LEN = 20;
 export const CONNECTED_MS = 10_000; // lastSeen entro 10s = connesso
 export const HOST_TIMEOUT_MS = 30_000; // host silente da >30s = migrazione

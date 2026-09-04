@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateCode, reduce, settle, sheetFor, toPlayerView } from "./game";
-import { CODE_ALPHABET, EMPTY, ROUND_MS, SLOTS } from "./prompts";
+import { CODE_ALPHABET, DEFAULT_SETTINGS, EMPTY, LIMITS, ROUND_MS, SLOTS } from "./prompts";
 import { GameError } from "./types";
 import type { RoomState } from "./types";
 
@@ -254,5 +254,87 @@ describe("generateCode", () => {
     }
     expect(generateCode(() => 0)).toBe("AAAA");
     expect(generateCode(() => 0.9999)).toBe("ZZZZ");
+  });
+});
+
+describe("settings", () => {
+  it("defaults to the standard values and exposes them in the view", () => {
+    const s = lobby(2);
+    expect(s.settings).toEqual(DEFAULT_SETTINGS);
+    expect(toPlayerView(s, "p0", T0).settings).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("host updates only the given fields", () => {
+    const s = reduce(lobby(2), {
+      type: "settings",
+      playerId: "p0",
+      patch: { roundMs: 30_000 },
+      now: T0,
+    });
+    expect(s.settings).toEqual({ ...DEFAULT_SETTINGS, roundMs: 30_000 });
+  });
+
+  it("returns the same reference when nothing changes", () => {
+    const s = lobby(2);
+    expect(reduce(s, { type: "settings", playerId: "p0", patch: { roundMs: ROUND_MS }, now: T0 })).toBe(s);
+  });
+
+  it("only the host, only in lobby", () => {
+    expect(code(() => reduce(lobby(2), { type: "settings", playerId: "p1", patch: {}, now: T0 }))).toBe("NOT_HOST");
+    expect(
+      code(() => reduce(started(2), { type: "settings", playerId: "p0", patch: { roundMs: 30_000 }, now: T0 })),
+    ).toBe("NOT_IN_LOBBY");
+  });
+
+  it("rejects out-of-range, inconsistent or non-integer values", () => {
+    const s = lobby(3);
+    const bad = (patch: Record<string, unknown>) =>
+      code(() => reduce(s, { type: "settings", playerId: "p0", patch: patch as never, now: T0 }));
+    expect(bad({ minPlayers: 1 })).toBe("INVALID_SETTINGS");
+    expect(bad({ maxPlayers: LIMITS.players.max + 1 })).toBe("INVALID_SETTINGS");
+    expect(bad({ minPlayers: 6, maxPlayers: 4 })).toBe("INVALID_SETTINGS");
+    expect(bad({ maxPlayers: 2 })).toBe("INVALID_SETTINGS"); // già 3 giocatori dentro
+    expect(bad({ roundMs: LIMITS.roundMs.min - 1000 })).toBe("INVALID_SETTINGS");
+    expect(bad({ maxAnswerLen: LIMITS.answerLen.max + 1 })).toBe("INVALID_SETTINGS");
+    expect(bad({ roundMs: 30_000.5 })).toBe("INVALID_SETTINGS");
+    expect(bad({ maxAnswerLen: "120" })).toBe("INVALID_SETTINGS");
+  });
+
+  it("maxPlayers caps the room", () => {
+    let s = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { maxPlayers: 3 }, now: T0 });
+    s = reduce(s, { type: "join", player: player(2), now: T0 });
+    expect(code(() => reduce(s, { type: "join", player: player(3), now: T0 }))).toBe("ROOM_FULL");
+  });
+
+  it("minPlayers gates the start", () => {
+    const s = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { minPlayers: 3 }, now: T0 });
+    expect(code(() => reduce(s, { type: "start", playerId: "p0", now: T0 }))).toBe("NOT_ENOUGH_PLAYERS");
+  });
+
+  it("roundMs drives the round deadline and the timeout", () => {
+    let s = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { roundMs: 20_000 }, now: T0 });
+    s = reduce(s, { type: "start", playerId: "p0", now: T0 });
+    expect(s.roundEndsAt).toBe(T0 + 20_000);
+    s = reduce(s, { type: "tick", now: T0 + 20_000 });
+    expect(s.round).toBe(1);
+    expect(s.roundEndsAt).toBe(T0 + 40_000);
+  });
+
+  it("maxAnswerLen limits the answers", () => {
+    let s = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { maxAnswerLen: 20 }, now: T0 });
+    s = reduce(s, { type: "start", playerId: "p0", now: T0 });
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", text: "x".repeat(21), now: T0 }))).toBe(
+      "INVALID_ANSWER",
+    );
+    expect(reduce(s, { type: "answer", playerId: "p0", text: "x".repeat(20), now: T0 }).sheets[0][0]).toBe(
+      "x".repeat(20),
+    );
+  });
+
+  it("falls back to the defaults for rooms saved before settings existed", () => {
+    const { settings: _omit, ...legacy } = lobby(2);
+    const s = legacy as unknown as RoomState;
+    expect(toPlayerView(s, "p0", T0).settings).toEqual(DEFAULT_SETTINGS);
+    expect(reduce(s, { type: "start", playerId: "p0", now: T0 }).roundEndsAt).toBe(T0 + ROUND_MS);
   });
 });

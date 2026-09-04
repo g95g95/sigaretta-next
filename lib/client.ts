@@ -74,9 +74,9 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
 
 const MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "Stanza non trovata",
-  ROOM_FULL: "Stanza piena (max 10)",
+  ROOM_FULL: "Stanza piena",
   NOT_IN_LOBBY: "La partita è già iniziata",
-  NOT_ENOUGH_PLAYERS: "Servono almeno 2 giocatori",
+  NOT_ENOUGH_PLAYERS: "Non ci sono abbastanza giocatori",
   NOT_HOST: "Solo l'host può farlo",
   NOT_A_PLAYER: "Non sei in questa stanza",
   NAME_TAKEN: "Nome già in uso",
@@ -87,6 +87,10 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function errorMessage(err: unknown): string {
-  if (err instanceof ApiClientError) return MESSAGES[err.code] ?? "Qualcosa è andato storto";
+  if (err instanceof ApiClientError) {
+    // INVALID_SETTINGS: il server spiega quale limite è stato violato.
+    if (err.code === "INVALID_SETTINGS") return err.message || "Impostazioni non valide";
+    return MESSAGES[err.code] ?? "Qualcosa è andato storto";
+  }
   return "Qualcosa è andato storto";
 }

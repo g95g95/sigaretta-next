@@ -1,20 +1,64 @@
 import {
   CODE_ALPHABET,
   CONNECTED_MS,
+  DEFAULT_SETTINGS,
   EMPTY,
   HOST_TIMEOUT_MS,
-  MAX_ANSWER_LEN,
+  LIMITS,
   MAX_NAME_LEN,
-  MAX_PLAYERS,
-  MIN_PLAYERS,
   PROMPTS,
-  ROUND_MS,
   SLOTS,
 } from "./prompts";
 import { GameError } from "./types";
-import type { Action, PlayerView, RoomState } from "./types";
+import type { Action, PlayerView, RoomSettings, RoomState, SettingsPatch } from "./types";
 
 const SEEN_GRANULARITY_MS = 4000;
+
+/** Impostazioni della stanza, con fallback per le stanze create prima del settings. */
+export function settingsOf(state: RoomState): RoomSettings {
+  return state.settings ?? DEFAULT_SETTINGS;
+}
+
+function inRange(v: unknown, min: number, max: number): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= min && v <= max;
+}
+
+/**
+ * Applica il patch alle impostazioni correnti validando i limiti duri.
+ * `playerCount` impedisce di ridurre la capienza sotto i presenti.
+ */
+export function applySettings(
+  current: RoomSettings,
+  patch: SettingsPatch,
+  playerCount: number,
+): RoomSettings {
+  const next: RoomSettings = {
+    minPlayers: patch.minPlayers ?? current.minPlayers,
+    maxPlayers: patch.maxPlayers ?? current.maxPlayers,
+    roundMs: patch.roundMs ?? current.roundMs,
+    maxAnswerLen: patch.maxAnswerLen ?? current.maxAnswerLen,
+  };
+
+  if (!inRange(next.minPlayers, LIMITS.players.min, LIMITS.players.max)) {
+    throw new GameError("INVALID_SETTINGS", "Numero minimo di giocatori fuori intervallo");
+  }
+  if (!inRange(next.maxPlayers, LIMITS.players.min, LIMITS.players.max)) {
+    throw new GameError("INVALID_SETTINGS", "Numero massimo di giocatori fuori intervallo");
+  }
+  if (next.minPlayers > next.maxPlayers) {
+    throw new GameError("INVALID_SETTINGS", "Il minimo non può superare il massimo");
+  }
+  if (next.maxPlayers < playerCount) {
+    throw new GameError("INVALID_SETTINGS", "Ci sono già più giocatori del massimo scelto");
+  }
+  if (!inRange(next.roundMs, LIMITS.roundMs.min, LIMITS.roundMs.max)) {
+    throw new GameError("INVALID_SETTINGS", "Tempo per round fuori intervallo");
+  }
+  if (!inRange(next.maxAnswerLen, LIMITS.answerLen.min, LIMITS.answerLen.max)) {
+    throw new GameError("INVALID_SETTINGS", "Lunghezza risposta fuori intervallo");
+  }
+  return next;
+}
 
 /** Foglietto compilato dal giocatore con seat p al round r. */
 export function sheetFor(seat: number, round: number, n: number): number {
@@ -34,7 +78,7 @@ function requireHost(state: RoomState, playerId: string): void {
 
 function closeRound(state: RoomState, now: number): RoomState {
   if (state.round + 1 < SLOTS) {
-    return { ...state, round: state.round + 1, roundEndsAt: now + ROUND_MS };
+    return { ...state, round: state.round + 1, roundEndsAt: now + settingsOf(state).roundMs };
   }
   return { ...state, phase: "reveal", revealIndex: 0, roundEndsAt: null };
 }
@@ -61,6 +105,7 @@ function createRoom(action: Extract<Action, { type: "create" }>): RoomState {
     game: 1,
     phase: "lobby",
     hostId: action.host.id,
+    settings: DEFAULT_SETTINGS,
     players: [{ ...action.host, lastSeen: action.now }],
     round: 0,
     roundEndsAt: null,
@@ -90,7 +135,7 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
 
     case "join": {
       if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
-      if (s.players.length >= MAX_PLAYERS) throw new GameError("ROOM_FULL");
+      if (s.players.length >= settingsOf(s).maxPlayers) throw new GameError("ROOM_FULL");
       const name = action.player.name.trim();
       if (name.length < 1 || name.length > MAX_NAME_LEN) throw new GameError("INVALID_NAME");
       const lower = name.toLowerCase();
@@ -105,22 +150,35 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
       requireHost(s, action.playerId);
       if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
       const n = s.players.length;
-      if (n < MIN_PLAYERS) throw new GameError("NOT_ENOUGH_PLAYERS");
+      if (n < settingsOf(s).minPlayers) throw new GameError("NOT_ENOUGH_PLAYERS");
       return {
         ...s,
         phase: "round",
         round: 0,
-        roundEndsAt: action.now + ROUND_MS,
+        roundEndsAt: action.now + settingsOf(s).roundMs,
         revealIndex: 0,
         sheets: Array.from({ length: n }, () => Array<string | null>(SLOTS).fill(null)),
       };
+    }
+
+    case "settings": {
+      requireHost(s, action.playerId);
+      if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
+      const current = settingsOf(s);
+      const settings = applySettings(current, action.patch, s.players.length);
+      const same = (Object.keys(settings) as (keyof RoomSettings)[]).every(
+        (k) => settings[k] === current[k],
+      );
+      return same && s.settings ? s : { ...s, settings };
     }
 
     case "answer": {
       if (s.phase !== "round") throw new GameError("WRONG_PHASE");
       const seat = seatOf(s, action.playerId);
       const text = action.text.trim();
-      if (text.length < 1 || text.length > MAX_ANSWER_LEN) throw new GameError("INVALID_ANSWER");
+      if (text.length < 1 || text.length > settingsOf(s).maxAnswerLen) {
+        throw new GameError("INVALID_ANSWER");
+      }
       const n = s.players.length;
       const sheetIdx = sheetFor(seat, s.round, n);
       if (s.sheets[sheetIdx][s.round] !== null) throw new GameError("ALREADY_ANSWERED");
@@ -191,6 +249,7 @@ export function toPlayerView(state: RoomState, playerId: string, now: number): P
     serverNow: now,
     me: { id: me.id, name: me.name, isHost: me.isHost, answered: me.answered },
     players,
+    settings: settingsOf(state),
     round: state.round,
     prompt: state.phase === "round" ? PROMPTS[state.round] : null,
     roundEndsAt: state.phase === "round" ? state.roundEndsAt : null,
