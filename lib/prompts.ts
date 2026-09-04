@@ -26,5 +26,5 @@ export const EMPTY = "…";
 /** Frase completa a partire dagli 8 pezzi (null = slot saltato). */
 export function composeSentence(parts: (string | null)[]): string {
   const p = parts.map((x) => (x && x.trim() ? x.trim() : EMPTY));
-  return `${p[0]} e ${p[1]}, ${p[2]}, ${p[3]}. ${p[0]} dice: «${p[4]}». ${p[1]} risponde: «${p[5]}». Arriva ${p[6]} e dice: «${p[7]}».`;
+  return `${p[0]} e ${p[1]} si trovano ${p[2]} e ${p[3]}. ${p[0]} dice: «${p[4]}». ${p[1]} risponde: «${p[5]}». Arriva ${p[6]} e dice: «${p[7]}».`;
 }
