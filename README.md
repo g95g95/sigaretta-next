@@ -32,6 +32,9 @@ Senza le env Upstash configurate, l'app usa uno store in memoria valido solo in 
 
 ## Come funziona
 
+- A fine partita ognuno scorre i foglietti per conto suo e può esportarli in JSON (bottone "Esporta in JSON").
+
+
 - Lo stato di ogni stanza è una singola chiave Redis con TTL di 24 ore.
 - Il client aggiorna la vista con il polling ogni 2 secondi, senza WebSocket.
 - Le regole del gioco vivono in un reducer puro in `lib/game.ts`, coperto da test vitest.

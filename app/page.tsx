@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@/components/Button";
-import { api, errorMessage, setToken } from "@/lib/client";
+import { api, errorMessage, getToken, setToken } from "@/lib/client";
 import { MAX_NAME_LEN } from "@/lib/prompts";
 import type { JoinResponse } from "@/lib/types";
 
@@ -17,6 +17,15 @@ export default function Home() {
   const enter = async (kind: "create" | "join") => {
     if (busy) return;
     setError(null);
+    // Già dentro questa stanza (es. dopo un refresh): rientra nel proprio posto.
+    if (kind === "join" && getToken(code)) {
+      router.push(`/r/${code}`);
+      return;
+    }
+    if (!name.trim()) {
+      setError("Scrivi prima il tuo nome");
+      return;
+    }
     setBusy(kind);
     try {
       const path = kind === "create" ? "/api/room" : `/api/room/${code}/join`;
@@ -81,7 +90,7 @@ export default function Home() {
         <Button
           variant="ghost"
           loading={busy === "join"}
-          disabled={!nameOk || code.length !== 4}
+          disabled={code.length !== 4}
           onClick={() => enter("join")}
         >
           Entra

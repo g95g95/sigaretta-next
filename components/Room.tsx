@@ -414,21 +414,53 @@ function Reveal(props: PhaseProps) {
 
 // ---------- ended ----------
 
+function exportJson(view: PlayerView, sheets: string[][]) {
+  const data = {
+    stanza: view.code,
+    partita: view.game,
+    esportatoIl: new Date().toISOString(),
+    domande: PROMPTS,
+    sigarette: sheets.map((parts) => ({
+      frase: composeSentence(parts),
+      risposte: Object.fromEntries(PROMPTS.map((label, i) => [label, parts[i]])),
+    })),
+  };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sigaretta-${view.code}-partita${view.game}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function Ended(props: PhaseProps) {
   const { view } = props;
   const { busy, error, run } = useAction(props);
   const sheets = view.reveal?.sheets ?? [];
+  const [index, setIndex] = useState(0); // ognuno scorre per conto suo
+  const current = sheets[index];
 
   return (
     <>
       <h1 className="title">Le storie</h1>
-      <p className="lead">Ecco tutti i foglietti di questa partita.</p>
+      <p className="eyebrow" aria-live="polite">
+        Foglietto {index + 1} di {sheets.length}
+      </p>
+      {current && <Sheet parts={current} unfoldKey={index} />}
 
-      {sheets.map((parts, i) => (
-        <Sheet key={i} parts={parts} flat />
-      ))}
+      <div className="row row-nav">
+        <Button variant="ghost" disabled={index === 0} onClick={() => setIndex(index - 1)}>
+          ← Precedente
+        </Button>
+        <Button variant="ghost" disabled={index >= sheets.length - 1} onClick={() => setIndex(index + 1)}>
+          Successiva →
+        </Button>
+      </div>
 
       <div className="actions">
+        <Button variant="ghost" block onClick={() => exportJson(view, sheets)}>
+          Esporta in JSON
+        </Button>
         {view.me.isHost ? (
           <Button block loading={busy} onClick={() => run("/restart")}>
             Nuova partita

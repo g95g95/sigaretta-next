@@ -107,6 +107,14 @@ h2 {
   min-width: 0;
 }
 
+.row-nav {
+  margin-top: 1rem;
+}
+
+.row-nav > .btn {
+  flex: 1 1 0;
+}
+
 /* ---------- foglietto ---------- */
 
 .paper {
