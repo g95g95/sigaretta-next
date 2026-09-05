@@ -1,4 +1,4 @@
-import { errorResponse, json, mutateAsPlayer, normalizeCode, readBody } from "@/lib/api";
+import { BadRequestError, errorResponse, json, mutateAsPlayer, normalizeCode, readBody } from "@/lib/api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,10 +9,12 @@ export async function POST(
 ): Promise<Response> {
   try {
     const code = normalizeCode((await params).code);
-    const { text } = await readBody<{ text?: unknown }>(req);
+    const { text, round } = await readBody<{ text?: unknown; round?: unknown }>(req);
+    if (typeof round !== "number") throw new BadRequestError("round mancante");
     const view = await mutateAsPlayer(code, req, (playerId, now) => ({
       type: "answer",
       playerId,
+      round,
       text: typeof text === "string" ? text : "",
       now,
     }));

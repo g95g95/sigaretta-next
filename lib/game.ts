@@ -1,22 +1,26 @@
+import { parseDrawing } from "./drawing";
 import {
   CODE_ALPHABET,
   CONNECTED_MS,
+  DEFAULT_ROUNDS,
   DEFAULT_SETTINGS,
   EMPTY,
   HOST_TIMEOUT_MS,
   LIMITS,
   MAX_NAME_LEN,
-  PROMPTS,
   SLOTS,
+  promptFor,
+  roundDuration,
+  slotKind,
 } from "./prompts";
 import { GameError } from "./types";
 import type { Action, PlayerView, RoomSettings, RoomState, SettingsPatch } from "./types";
 
 const SEEN_GRANULARITY_MS = 4000;
 
-/** Impostazioni della stanza, con fallback per le stanze create prima del settings. */
+/** Impostazioni della stanza, con fallback (anche per singolo campo) per le stanze salvate prima. */
 export function settingsOf(state: RoomState): RoomSettings {
-  return state.settings ?? DEFAULT_SETTINGS;
+  return state.settings ? { ...DEFAULT_SETTINGS, ...state.settings } : DEFAULT_SETTINGS;
 }
 
 function inRange(v: unknown, min: number, max: number): v is number {
@@ -32,13 +36,23 @@ export function applySettings(
   patch: SettingsPatch,
   playerCount: number,
 ): RoomSettings {
+  const mode = patch.mode ?? current.mode;
+  if (mode !== "classic" && mode !== "drawing") {
+    throw new GameError("INVALID_SETTINGS", "Modalità sconosciuta");
+  }
   const next: RoomSettings = {
+    mode,
+    // classic ha sempre 8 turni; in drawing si può scegliere
+    rounds: mode === "classic" ? SLOTS : (patch.rounds ?? (current.mode === "drawing" ? current.rounds : DEFAULT_ROUNDS)),
     minPlayers: patch.minPlayers ?? current.minPlayers,
     maxPlayers: patch.maxPlayers ?? current.maxPlayers,
     roundMs: patch.roundMs ?? current.roundMs,
     maxAnswerLen: patch.maxAnswerLen ?? current.maxAnswerLen,
   };
 
+  if (mode === "drawing" && !inRange(next.rounds, LIMITS.rounds.min, LIMITS.rounds.max)) {
+    throw new GameError("INVALID_SETTINGS", "Numero di turni fuori intervallo");
+  }
   if (!inRange(next.minPlayers, LIMITS.players.min, LIMITS.players.max)) {
     throw new GameError("INVALID_SETTINGS", "Numero minimo di giocatori fuori intervallo");
   }
@@ -77,10 +91,12 @@ function requireHost(state: RoomState, playerId: string): void {
 }
 
 function closeRound(state: RoomState, now: number): RoomState {
-  if (state.round + 1 < SLOTS) {
-    return { ...state, round: state.round + 1, roundEndsAt: now + settingsOf(state).roundMs };
+  const settings = settingsOf(state);
+  const next = state.round + 1;
+  if (next < settings.rounds) {
+    return { ...state, round: next, roundEndsAt: now + roundDuration(settings, next) };
   }
-  return { ...state, phase: "reveal", revealIndex: 0, roundEndsAt: null };
+  return { ...state, phase: "reveal", revealIndex: 0, revealStep: 0, roundEndsAt: null };
 }
 
 /** Timeout round + host migration. Restituisce la stessa reference se nulla cambia. */
@@ -105,13 +121,26 @@ function createRoom(action: Extract<Action, { type: "create" }>): RoomState {
     game: 1,
     phase: "lobby",
     hostId: action.host.id,
-    settings: DEFAULT_SETTINGS,
+    settings: applySettings(DEFAULT_SETTINGS, action.settings, 1),
     players: [{ ...action.host, lastSeen: action.now }],
     round: 0,
     roundEndsAt: null,
     sheets: [],
     revealIndex: 0,
+    revealStep: 0,
   };
+}
+
+/** Valida e normalizza la risposta per il tipo di slot; lancia INVALID_ANSWER. */
+function cleanAnswer(state: RoomState, raw: string): string {
+  const settings = settingsOf(state);
+  if (slotKind(settings.mode, state.round) === "drawing") {
+    if (!parseDrawing(raw)) throw new GameError("INVALID_ANSWER");
+    return raw;
+  }
+  const text = raw.trim();
+  if (text.length < 1 || text.length > settings.maxAnswerLen) throw new GameError("INVALID_ANSWER");
+  return text;
 }
 
 export function reduce(state: RoomState | null, action: Action): RoomState {
@@ -149,15 +178,17 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
     case "start": {
       requireHost(s, action.playerId);
       if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
+      const settings = settingsOf(s);
       const n = s.players.length;
-      if (n < settingsOf(s).minPlayers) throw new GameError("NOT_ENOUGH_PLAYERS");
+      if (n < settings.minPlayers) throw new GameError("NOT_ENOUGH_PLAYERS");
       return {
         ...s,
         phase: "round",
         round: 0,
-        roundEndsAt: action.now + settingsOf(s).roundMs,
+        roundEndsAt: action.now + roundDuration(settings, 0),
         revealIndex: 0,
-        sheets: Array.from({ length: n }, () => Array<string | null>(SLOTS).fill(null)),
+        revealStep: 0,
+        sheets: Array.from({ length: n }, () => Array<string | null>(settings.rounds).fill(null)),
       };
     }
 
@@ -175,10 +206,9 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
     case "answer": {
       if (s.phase !== "round") throw new GameError("WRONG_PHASE");
       const seat = seatOf(s, action.playerId);
-      const text = action.text.trim();
-      if (text.length < 1 || text.length > settingsOf(s).maxAnswerLen) {
-        throw new GameError("INVALID_ANSWER");
-      }
+      // Risposta arrivata dopo la chiusura del round: non deve finire nel round successivo.
+      if (action.round !== s.round) throw new GameError("ROUND_OVER");
+      const text = cleanAnswer(s, action.text);
       const n = s.players.length;
       const sheetIdx = sheetFor(seat, s.round, n);
       if (s.sheets[sheetIdx][s.round] !== null) throw new GameError("ALREADY_ANSWERED");
@@ -193,8 +223,13 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
     case "advance": {
       requireHost(s, action.playerId);
       if (s.phase !== "reveal") throw new GameError("WRONG_PHASE");
+      const settings = settingsOf(s);
+      // In drawing si svela un passaggio alla volta prima di passare al foglietto dopo.
+      if (settings.mode === "drawing" && s.revealStep + 1 < settings.rounds) {
+        return { ...s, revealStep: s.revealStep + 1 };
+      }
       if (s.revealIndex >= s.players.length - 1) return { ...s, phase: "ended" };
-      return { ...s, revealIndex: s.revealIndex + 1 };
+      return { ...s, revealIndex: s.revealIndex + 1, revealStep: 0 };
     }
 
     case "restart": {
@@ -207,6 +242,7 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
         sheets: [],
         round: 0,
         revealIndex: 0,
+        revealStep: 0,
         roundEndsAt: null,
       };
     }
@@ -221,6 +257,8 @@ function answeredInRound(state: RoomState, seat: number): boolean {
 
 export function toPlayerView(state: RoomState, playerId: string, now: number): PlayerView {
   const mySeat = seatOf(state, playerId);
+  const settings = settingsOf(state);
+  const { mode, rounds: slots } = settings;
   const n = state.players.length;
   const players = state.players.map((p, seat) => ({
     id: p.id,
@@ -230,15 +268,24 @@ export function toPlayerView(state: RoomState, playerId: string, now: number): P
     answered: answeredInRound(state, seat),
   }));
   const me = players[mySeat];
+  const inRound = state.phase === "round";
+
+  // Drawing: il giocatore vede solo il passaggio precedente del foglietto che ha in mano.
+  let previous: string | null = null;
+  if (inRound && mode === "drawing" && state.round > 0) {
+    previous = state.sheets[sheetFor(mySeat, state.round, n)][state.round - 1];
+  }
 
   let reveal: PlayerView["reveal"] = null;
   if (state.phase === "reveal" || state.phase === "ended") {
-    const upto = state.phase === "ended" ? n : state.revealIndex + 1;
-    reveal = {
-      index: state.phase === "ended" ? n - 1 : state.revealIndex,
-      total: n,
-      sheets: state.sheets.slice(0, upto).map((sheet) => sheet.map((v) => v ?? EMPTY)),
-    };
+    const ended = state.phase === "ended";
+    const index = ended ? n - 1 : state.revealIndex;
+    const step = ended || mode === "classic" ? slots - 1 : (state.revealStep ?? 0);
+    const sheets = state.sheets.slice(0, index + 1).map((sheet, i) => {
+      const visible = i === index ? sheet.slice(0, step + 1) : sheet;
+      return visible.map((v) => v ?? EMPTY);
+    });
+    reveal = { index, step, total: n, sheets };
   }
 
   return {
@@ -247,13 +294,17 @@ export function toPlayerView(state: RoomState, playerId: string, now: number): P
     game: state.game,
     phase: state.phase,
     serverNow: now,
+    settings,
+    mode,
+    slots,
     me: { id: me.id, name: me.name, isHost: me.isHost, answered: me.answered },
     players,
-    settings: settingsOf(state),
     round: state.round,
-    prompt: state.phase === "round" ? PROMPTS[state.round] : null,
-    roundEndsAt: state.phase === "round" ? state.roundEndsAt : null,
-    answeredCount: state.phase === "round" ? players.filter((p) => p.answered).length : 0,
+    prompt: inRound ? promptFor(mode, state.round) : null,
+    kind: inRound ? slotKind(mode, state.round) : null,
+    previous,
+    roundEndsAt: inRound ? state.roundEndsAt : null,
+    answeredCount: inRound ? players.filter((p) => p.answered).length : 0,
     total: n,
     reveal,
   };

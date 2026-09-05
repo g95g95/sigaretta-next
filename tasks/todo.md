@@ -19,3 +19,21 @@
 - [x] T3 (τ medio → Opus): UI (home, /r/[code], componenti, CSS)
 - [x] T4 (τ facile → Sonnet): README, CLAUDE.md, .env.example
 - [x] T5 (me): npm test + build, smoke test API end-to-end, review
+
+# Modalità Disegno — piano (2026-09-05)
+
+## Decisioni e assunzioni
+1. Due modalità di stanza, scelte da chi crea: `classic` (8 domande, invariata) e `drawing`.
+2. Drawing: i turni si alternano — turno 1 testo libero ("descrivi una scena"), turno 2 disegno della descrizione, turno 3 descrizione del disegno, ecc. Ogni giocatore vede SOLO il passaggio precedente del foglietto che ha in mano.
+3. Numero turni drawing configurabile 4–8 (default 6) alla creazione della stanza; classic resta 8. Il conteggio vive in `RoomState.slots`.
+4. I disegni sono vettoriali (tratti con colore/spessore/punti quantizzati su griglia 400×400, delta-encoded) serializzati in stringa nello stesso `sheets[i][slot]`: il "tipo" dello slot deriva da `(mode, slot)`, non dal contenuto. Limite 20 000 caratteri per disegno, validato dal reducer.
+5. Turni di disegno durano 90s (testo 60s). L'azione `answer` porta il `round` a cui si riferisce: se il round è già chiuso → `ROUND_OVER` (evita che una risposta in ritardo finisca nel round successivo).
+6. Reveal drawing: l'host svela un passaggio alla volta (`revealStep`), poi il foglietto successivo. Il client riceve solo i passaggi già svelati.
+7. Nessuna feature extra: niente riempimento a secchiello, niente salvataggio immagini.
+
+## Task
+- [x] T1 tipi/costanti: `lib/types.ts`, `lib/prompts.ts`, nuovo `lib/drawing.ts` (encode/parse/valida)
+- [x] T2 reducer `lib/game.ts` + test
+- [x] T3 API: create con `{mode, rounds}`, answer con `{text, round}`
+- [x] T4 UI: home (scelta modalità/turni), `DrawBoard`, `DrawingView`, Round/Reveal/Ended in drawing mode, CSS
+- [x] T5 docs (README, CLAUDE.md), `npm test`, `npm run build`

@@ -4,6 +4,8 @@ La Sigaretta è la versione online del classico gioco dei bigliettini a rotazion
 Da 2 a 10 giocatori scrivono a turno sui foglietti, che ruotano tra i partecipanti a ogni round da 60 secondi (l'host può cambiare questi valori nelle impostazioni della stanza).
 Alla fine l'host guida il reveal delle frasi complete, foglietto per foglietto.
 
+Nella **modalità Disegno** (scelta da chi crea la stanza) i turni si alternano: il primo giocatore descrive una scena, il successivo la disegna su una lavagna a colori vedendo solo la descrizione, il terzo descrive il disegno vedendo solo quello, e così via. Il numero di turni è configurabile da 4 a 8; alla fine l'host svela ogni catena un passaggio alla volta.
+
 ## Deploy in 5 passi
 
 1. Fork del repo
@@ -32,12 +34,13 @@ Senza le env Upstash configurate, l'app usa uno store in memoria valido solo in 
 
 ## Come funziona
 
-- In lobby l'host può regolare le impostazioni della stanza: giocatori minimi e massimi (2–10), tempo per round (15–300 s) e caratteri per risposta (20–300). Valgono per la stanza, anche nelle partite successive.
+- In lobby l'host può regolare le impostazioni della stanza: modalità e turni, giocatori minimi e massimi (2–10), tempo per round (15–300 s) e caratteri per risposta (20–300). Valgono per la stanza, anche nelle partite successive.
 - A fine partita ognuno scorre i foglietti per conto suo e può esportarli in JSON (bottone "Esporta in JSON").
 
 
-- Lo stato di ogni stanza è una singola chiave Redis con TTL di 24 ore.
-- Il client aggiorna la vista con il polling ogni 2 secondi, senza WebSocket.
+- Lo stato di ogni stanza è una singola chiave Redis con TTL di 24 ore. I disegni sono vettoriali (tratti compatti, max 20 KB l'uno) e vivono nella stessa chiave.
+- Il client aggiorna la vista con il polling ogni 2 secondi (5 a partita finita), senza WebSocket.
+- I turni di disegno durano 30 secondi in più di quelli di testo; il disegno viene inviato da solo a 3 secondi dalla fine, per non perderlo.
 - Le regole del gioco vivono in un reducer puro in `lib/game.ts`, coperto da test vitest.
 - La cecità sui bigliettini è garantita lato server: il client non riceve mai risposte non ancora rivelate.
 - Se l'host resta silente per 30 secondi, il ruolo passa automaticamente a un altro giocatore connesso.

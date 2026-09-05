@@ -82,6 +82,8 @@ const MESSAGES: Record<string, string> = {
   NAME_TAKEN: "Nome già in uso",
   INVALID_NAME: "Nome non valido",
   INVALID_ANSWER: "Risposta non valida",
+  INVALID_SETTINGS: "Impostazioni non valide",
+  ROUND_OVER: "Tempo scaduto per questo turno",
   WRONG_PHASE: "Azione non disponibile ora",
   CONFLICT: "Riprova tra un istante",
 };

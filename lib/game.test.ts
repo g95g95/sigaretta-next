@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { generateCode, reduce, settle, sheetFor, toPlayerView } from "./game";
-import { CODE_ALPHABET, DEFAULT_SETTINGS, EMPTY, LIMITS, ROUND_MS, SLOTS } from "./prompts";
+import { parseDrawing, serializeDrawing } from "./drawing";
+import { applySettings, generateCode, reduce, settle, sheetFor, toPlayerView } from "./game";
+import { CODE_ALPHABET, DEFAULT_SETTINGS, DRAW_EXTRA_MS, EMPTY, LIMITS, ROUND_MS, SLOTS } from "./prompts";
 import { GameError } from "./types";
 import type { RoomState } from "./types";
 
@@ -11,7 +12,7 @@ function player(i: number) {
 }
 
 function lobby(n: number, now = T0): RoomState {
-  let s = reduce(null, { type: "create", code: "ABCD", host: player(0), now });
+  let s = reduce(null, { type: "create", code: "ABCD", host: player(0), settings: {}, now });
   for (let i = 1; i < n; i++) s = reduce(s, { type: "join", player: player(i), now });
   return s;
 }
@@ -22,7 +23,7 @@ function started(n: number, now = T0): RoomState {
 
 function answerAll(s: RoomState, now: number): RoomState {
   const r = s.round;
-  for (const p of s.players) s = reduce(s, { type: "answer", playerId: p.id, text: `${p.id}-r${r}`, now });
+  for (const p of s.players) s = reduce(s, { type: "answer", playerId: p.id, round: r, text: `${p.id}-r${r}`, now });
   return s;
 }
 
@@ -63,9 +64,9 @@ describe("rotation", () => {
 
   it("closes the round early when everyone answered", () => {
     let s = started(2);
-    s = reduce(s, { type: "answer", playerId: "p0", text: "a", now: T0 + 1 });
+    s = reduce(s, { type: "answer", playerId: "p0", round: 0, text: "a", now: T0 + 1 });
     expect(s.round).toBe(0);
-    s = reduce(s, { type: "answer", playerId: "p1", text: "b", now: T0 + 2 });
+    s = reduce(s, { type: "answer", playerId: "p1", round: 0, text: "b", now: T0 + 2 });
     expect(s.round).toBe(1);
     expect(s.roundEndsAt).toBe(T0 + 2 + ROUND_MS);
   });
@@ -74,7 +75,7 @@ describe("rotation", () => {
 describe("timeout", () => {
   it("advances the round on tick after roundEndsAt; missing slots stay null and show as EMPTY", () => {
     let s = started(2);
-    s = reduce(s, { type: "answer", playerId: "p0", text: "solo", now: T0 + 5 });
+    s = reduce(s, { type: "answer", playerId: "p0", round: 0, text: "solo", now: T0 + 5 });
     s = reduce(s, { type: "tick", now: T0 + ROUND_MS });
     expect(s.round).toBe(1);
     expect(s.sheets[0][0]).toBe("solo");
@@ -86,11 +87,12 @@ describe("timeout", () => {
     expect(v.reveal?.sheets[0][1]).toBe(EMPTY);
   });
 
-  it("settle is applied before any action (late answer lands in the next round)", () => {
-    let s = started(2);
-    s = reduce(s, { type: "answer", playerId: "p0", text: "late", now: T0 + ROUND_MS });
-    expect(s.round).toBe(1);
-    expect(s.sheets[sheetFor(0, 1, 2)][1]).toBe("late");
+  it("settle is applied before any action (late answer is refused with ROUND_OVER)", () => {
+    const s = started(2);
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: 0, text: "late", now: T0 + ROUND_MS }))).toBe("ROUND_OVER");
+    const t = reduce(s, { type: "answer", playerId: "p0", round: 1, text: "ok", now: T0 + ROUND_MS });
+    expect(t.round).toBe(1);
+    expect(t.sheets[sheetFor(0, 1, 2)][1]).toBe("ok");
   });
 });
 
@@ -185,7 +187,7 @@ describe("reveal", () => {
 describe("blindness", () => {
   it("round view never contains answers or tokens", () => {
     let s = started(3);
-    s = reduce(s, { type: "answer", playerId: "p0", text: "SEGRETO", now: T0 + 1 });
+    s = reduce(s, { type: "answer", playerId: "p0", round: 0, text: "SEGRETO", now: T0 + 1 });
     for (const p of s.players) {
       const json = JSON.stringify(toPlayerView(s, p.id, T0 + 2));
       expect(json).not.toContain("SEGRETO");
@@ -212,7 +214,7 @@ describe("no-op and immutability", () => {
     const s = started(2);
     const snapshot = JSON.stringify(s);
     expect(reduce(s, { type: "tick", now: T0 + 1 })).toBe(s);
-    reduce(s, { type: "answer", playerId: "p0", text: "x", now: T0 + 1 });
+    reduce(s, { type: "answer", playerId: "p0", round: 0, text: "x", now: T0 + 1 });
     expect(JSON.stringify(s)).toBe(snapshot);
   });
 });
@@ -225,11 +227,11 @@ describe("errors", () => {
     expect(code(() => reduce(lobby(1), { type: "start", playerId: "p0", now: T0 }))).toBe("NOT_ENOUGH_PLAYERS");
   });
   it("ALREADY_ANSWERED", () => {
-    const s = reduce(started(2), { type: "answer", playerId: "p0", text: "a", now: T0 });
-    expect(code(() => reduce(s, { type: "answer", playerId: "p0", text: "b", now: T0 }))).toBe("ALREADY_ANSWERED");
+    const s = reduce(started(2), { type: "answer", playerId: "p0", round: 0, text: "a", now: T0 });
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: 0, text: "b", now: T0 }))).toBe("ALREADY_ANSWERED");
   });
   it("INVALID_ANSWER on empty text", () => {
-    expect(code(() => reduce(started(2), { type: "answer", playerId: "p0", text: "   ", now: T0 }))).toBe("INVALID_ANSWER");
+    expect(code(() => reduce(started(2), { type: "answer", playerId: "p0", round: 0, text: "   ", now: T0 }))).toBe("INVALID_ANSWER");
   });
   it("ROOM_FULL", () => {
     expect(code(() => reduce(lobby(10), { type: "join", player: player(10), now: T0 }))).toBe("ROOM_FULL");
@@ -254,6 +256,165 @@ describe("generateCode", () => {
     }
     expect(generateCode(() => 0)).toBe("AAAA");
     expect(generateCode(() => 0.9999)).toBe("ZZZZ");
+  });
+});
+
+// ---------- modalità disegno ----------
+
+const DRAWING = serializeDrawing([
+  { c: 0, w: 1, p: [10, 10, 50, 60, 100, 60] },
+  { c: 3, w: 0, p: [200, 200] },
+]);
+
+function drawingLobby(n: number, rounds = 4, now = T0): RoomState {
+  let s = reduce(null, { type: "create", code: "ABCD", host: player(0), settings: { mode: "drawing", rounds }, now });
+  for (let i = 1; i < n; i++) s = reduce(s, { type: "join", player: player(i), now });
+  return s;
+}
+
+function drawingStarted(n: number, rounds = 4, now = T0): RoomState {
+  return reduce(drawingLobby(n, rounds, now), { type: "start", playerId: "p0", now });
+}
+
+function answerAllDrawing(s: RoomState, now: number): RoomState {
+  const r = s.round;
+  for (const p of s.players) {
+    const text = r % 2 === 1 ? DRAWING : `${p.id}-r${r}`;
+    s = reduce(s, { type: "answer", playerId: p.id, round: r, text, now });
+  }
+  return s;
+}
+
+describe("drawing encoding", () => {
+  it("round-trips and rejects malformed input", () => {
+    expect(parseDrawing(DRAWING)).toEqual([
+      { c: 0, w: 1, p: [10, 10, 50, 60, 100, 60] },
+      { c: 3, w: 0, p: [200, 200] },
+    ]);
+    expect(parseDrawing("[]")).toBeNull();
+    expect(parseDrawing("ciao")).toBeNull();
+    expect(parseDrawing("[[0,0,10]]")).toBeNull(); // dispari
+    expect(parseDrawing("[[99,0,10,10]]")).toBeNull(); // colore fuori range
+    expect(parseDrawing("[[0,0,10,10,-20,0]]")).toBeNull(); // fuori griglia
+    expect(parseDrawing("[[0,0,1.5,2]]")).toBeNull(); // non interi
+  });
+});
+
+describe("drawing settings", () => {
+  it("classic is always 8 rounds; drawing 4–8", () => {
+    const D = DEFAULT_SETTINGS;
+    expect(applySettings(D, { mode: "classic", rounds: 3 }, 1).rounds).toBe(SLOTS);
+    expect(applySettings(D, { mode: "drawing", rounds: 4 }, 1)).toMatchObject({ mode: "drawing", rounds: 4 });
+    expect(applySettings(D, { mode: "drawing", rounds: 8 }, 1)).toMatchObject({ mode: "drawing", rounds: 8 });
+    expect(applySettings(D, { mode: "drawing" }, 1).rounds).toBe(6); // default drawing
+    expect(code(() => applySettings(D, { mode: "drawing", rounds: 3 }, 1))).toBe("INVALID_SETTINGS");
+    expect(code(() => applySettings(D, { mode: "drawing", rounds: 9 }, 1))).toBe("INVALID_SETTINGS");
+    expect(code(() => applySettings(D, { mode: "drawing", rounds: 5.5 }, 1))).toBe("INVALID_SETTINGS");
+    expect(code(() => applySettings(D, { mode: "boh" as "drawing" }, 1))).toBe("INVALID_SETTINGS");
+    expect(drawingStarted(2, 5).sheets[0]).toHaveLength(5);
+  });
+
+  it("host can switch mode and rounds in lobby; classic resets rounds to 8", () => {
+    let s = lobby(2);
+    s = reduce(s, { type: "settings", playerId: "p0", patch: { mode: "drawing", rounds: 5 }, now: T0 });
+    expect(s.settings).toMatchObject({ mode: "drawing", rounds: 5 });
+    expect(toPlayerView(s, "p1", T0)).toMatchObject({ mode: "drawing", slots: 5 });
+    s = reduce(s, { type: "settings", playerId: "p0", patch: { mode: "classic" }, now: T0 });
+    expect(s.settings).toMatchObject({ mode: "classic", rounds: SLOTS });
+    expect(code(() => reduce(started(2), { type: "settings", playerId: "p0", patch: { mode: "drawing" }, now: T0 }))).toBe("NOT_IN_LOBBY");
+  });
+
+  it("drawing rounds use roundMs + DRAW_EXTRA_MS; text slots respect maxAnswerLen", () => {
+    let s = reduce(drawingLobby(2), { type: "settings", playerId: "p0", patch: { roundMs: 20_000, maxAnswerLen: 20 }, now: T0 });
+    s = reduce(s, { type: "start", playerId: "p0", now: T0 });
+    expect(s.roundEndsAt).toBe(T0 + 20_000);
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: 0, text: "x".repeat(21), now: T0 }))).toBe("INVALID_ANSWER");
+    s = reduce(s, { type: "tick", now: T0 + 20_000 });
+    expect(s.round).toBe(1);
+    expect(s.roundEndsAt).toBe(T0 + 20_000 + 20_000 + DRAW_EXTRA_MS);
+  });
+});
+
+describe("drawing rounds", () => {
+  it("alternates text and drawing, with longer drawing rounds", () => {
+    let s = drawingStarted(2);
+    expect(s.roundEndsAt).toBe(T0 + ROUND_MS);
+    let v = toPlayerView(s, "p0", T0);
+    expect(v.kind).toBe("text");
+    expect(v.previous).toBeNull();
+    s = answerAllDrawing(s, T0 + 1);
+    expect(s.round).toBe(1);
+    expect(s.roundEndsAt).toBe(T0 + 1 + ROUND_MS + DRAW_EXTRA_MS);
+    v = toPlayerView(s, "p0", T0 + 2);
+    expect(v.kind).toBe("drawing");
+    // p0 al round 1 ha il foglietto 1, scritto da p1 al round 0
+    expect(v.previous).toBe("p1-r0");
+    expect(toPlayerView(s, "p1", T0 + 2).previous).toBe("p0-r0");
+  });
+
+  it("validates the answer by slot kind", () => {
+    let s = answerAllDrawing(drawingStarted(2), T0 + 1);
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: 1, text: "un gatto", now: T0 + 2 }))).toBe("INVALID_ANSWER");
+    s = reduce(s, { type: "answer", playerId: "p0", round: 1, text: DRAWING, now: T0 + 2 });
+    expect(s.sheets[1][1]).toBe(DRAWING);
+  });
+
+  it("previous is null when the previous step timed out", () => {
+    let s = drawingStarted(2);
+    s = reduce(s, { type: "tick", now: T0 + ROUND_MS });
+    expect(s.round).toBe(1);
+    expect(toPlayerView(s, "p0", T0 + ROUND_MS).previous).toBeNull();
+  });
+
+  it("round view never leaks other sheets", () => {
+    let s = drawingStarted(3);
+    s = reduce(s, { type: "answer", playerId: "p0", round: 0, text: "SEGRETO", now: T0 + 1 });
+    for (const id of ["p1", "p2"]) {
+      expect(JSON.stringify(toPlayerView(s, id, T0 + 2))).not.toContain("SEGRETO");
+    }
+  });
+});
+
+describe("drawing reveal", () => {
+  function revealed(): RoomState {
+    let s = drawingStarted(2);
+    for (let r = 0; r < 4; r++) s = answerAllDrawing(s, T0 + r);
+    return s;
+  }
+
+  it("reveals one step at a time, then the next sheet, then ends", () => {
+    let s = revealed();
+    expect(s.phase).toBe("reveal");
+    let v = toPlayerView(s, "p1", T0);
+    expect(v.reveal?.step).toBe(0);
+    expect(v.reveal?.sheets).toEqual([["p0-r0"]]);
+    s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    v = toPlayerView(s, "p1", T0);
+    expect(v.reveal?.sheets).toEqual([["p0-r0", DRAWING]]);
+    s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    expect(s.revealIndex).toBe(0);
+    expect(toPlayerView(s, "p1", T0).reveal?.sheets[0]).toHaveLength(4);
+    s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    expect(s.revealIndex).toBe(1);
+    expect(s.revealStep).toBe(0);
+    v = toPlayerView(s, "p1", T0);
+    expect(v.reveal?.sheets[0]).toHaveLength(4);
+    expect(v.reveal?.sheets[1]).toEqual(["p1-r0"]);
+    for (let i = 0; i < 3; i++) s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    expect(s.phase).toBe("reveal");
+    s = reduce(s, { type: "advance", playerId: "p0", now: T0 });
+    expect(s.phase).toBe("ended");
+    v = toPlayerView(s, "p1", T0);
+    expect(v.reveal?.sheets.map((x) => x.length)).toEqual([4, 4]);
+  });
+
+  it("restart keeps mode and rounds", () => {
+    let s = revealed();
+    s = reduce(s, { type: "restart", playerId: "p0", now: T0 });
+    expect(s.settings.mode).toBe("drawing");
+    expect(s.settings.rounds).toBe(4);
+    expect(s.revealStep).toBe(0);
   });
 });
 
@@ -323,10 +484,10 @@ describe("settings", () => {
   it("maxAnswerLen limits the answers", () => {
     let s = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { maxAnswerLen: 20 }, now: T0 });
     s = reduce(s, { type: "start", playerId: "p0", now: T0 });
-    expect(code(() => reduce(s, { type: "answer", playerId: "p0", text: "x".repeat(21), now: T0 }))).toBe(
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: 0, text: "x".repeat(21), now: T0 }))).toBe(
       "INVALID_ANSWER",
     );
-    expect(reduce(s, { type: "answer", playerId: "p0", text: "x".repeat(20), now: T0 }).sheets[0][0]).toBe(
+    expect(reduce(s, { type: "answer", playerId: "p0", round: 0, text: "x".repeat(20), now: T0 }).sheets[0][0]).toBe(
       "x".repeat(20),
     );
   });

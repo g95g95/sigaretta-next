@@ -529,6 +529,236 @@ input[type="range"] {
   border: 0;
 }
 
+/* ---------- scelta modalità (home) ---------- */
+
+.choice {
+  border: 0;
+  padding: 0;
+  margin: 1.1rem 0 0;
+  min-width: 0;
+}
+
+.choice legend,
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 0;
+  margin-bottom: 0.35rem;
+}
+
+.seg {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.seg > button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  background: rgba(255, 253, 246, 0.7);
+  border: 1px solid var(--line);
+  border-bottom: 2px solid rgba(31, 27, 22, 0.32);
+  border-radius: 8px 6px 9px 7px;
+  cursor: pointer;
+}
+
+.seg > button span {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+.seg > button[aria-checked="true"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.seg > button[aria-checked="true"] span {
+  color: rgba(244, 239, 228, 0.75);
+}
+
+.seg > button:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.seg-compact > button {
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.2rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rounds-row {
+  margin-top: 0.8rem;
+}
+
+
+/* ---------- disegno ---------- */
+
+.board-wrap {
+  margin-top: 0.4rem;
+}
+
+.board {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #fffdf6;
+  border: 1px solid var(--line);
+  border-radius: 8px 6px 9px 7px;
+  box-shadow: var(--shadow);
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.board[data-disabled="true"] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.palette {
+  display: grid;
+  /* minmax(0, 1fr): sui telefoni stretti gli swatch si restringono invece di sbordare */
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 0.3rem;
+  margin-top: 0.7rem;
+}
+
+.swatch {
+  width: 100%;
+  aspect-ratio: 1;
+  min-height: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(31, 27, 22, 0.15);
+  cursor: pointer;
+  padding: 0;
+}
+
+.swatch-eraser {
+  border-style: dashed;
+}
+
+.swatch[aria-checked="true"] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--paper), 0 0 0 5px var(--ink);
+}
+
+.swatch:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.8rem;
+}
+
+.widths {
+  display: flex;
+  gap: 0.3rem;
+  flex: 1 1 auto;
+}
+
+.width-btn {
+  width: var(--tap);
+  height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.width-btn span {
+  display: block;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.width-btn[aria-checked="true"] {
+  border-color: var(--ink);
+  background: rgba(31, 27, 22, 0.08);
+}
+
+.width-btn:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.drawing {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #fffdf6;
+  border: 1px solid var(--line);
+  border-radius: 8px 6px 9px 7px;
+  box-shadow: var(--shadow);
+  margin: 0.4rem 0 0.9rem;
+}
+
+.drawing-missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  color: var(--ink-2);
+}
+
+.quote {
+  font-family: var(--font-hand), var(--font-serif), cursive;
+  font-size: clamp(1.4rem, 6vw, 1.8rem);
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.paper + .board-wrap,
+.paper + .field {
+  margin-top: 0.9rem;
+}
+
+/* ---------- catena (reveal disegno) ---------- */
+
+.chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chain-step {
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.chain-step:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.chain-step .eyebrow {
+  margin-bottom: 0.35rem;
+}
+
+.chain-step .drawing {
+  margin-bottom: 0;
+}
+
 /* ---------- animazioni ---------- */
 
 @keyframes fade-in {

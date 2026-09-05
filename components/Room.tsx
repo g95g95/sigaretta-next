@@ -3,14 +3,20 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "@/components/Button";
+import DrawBoard from "@/components/DrawBoard";
+import DrawingView from "@/components/DrawingView";
 import PaperCard from "@/components/PaperCard";
 import PlayerList from "@/components/PlayerList";
-import Timer from "@/components/Timer";
+import Timer, { useCountdown } from "@/components/Timer";
 import { ApiClientError, api, clearToken, errorMessage, getToken, setToken } from "@/lib/client";
-import { LIMITS, MAX_NAME_LEN, PROMPTS, SLOTS, composeSentence } from "@/lib/prompts";
-import type { JoinResponse, PlayerView, RoomSettings } from "@/lib/types";
+import { serializeDrawing } from "@/lib/drawing";
+import type { Drawing } from "@/lib/drawing";
+import { DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_NAME_LEN, PROMPTS, SLOTS, composeSentence, slotKind } from "@/lib/prompts";
+import type { JoinResponse, PlayerPublic, PlayerView, RoomSettings } from "@/lib/types";
 
 const POLL_MS = 2000;
+const ENDED_POLL_MS = 5000; // a fine partita la vista è grande (disegni) e cambia solo al restart
+const AUTOSEND_S = 3; // drawing: invio automatico a pochi secondi dalla fine, per non perdere il disegno
 
 export default function Room({ code }: { code: string }) {
   const [token, setTok] = useState<string | null>(null);
@@ -18,6 +24,8 @@ export default function Room({ code }: { code: string }) {
   const [view, setView] = useState<PlayerView | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const phaseRef = useRef<PlayerView["phase"] | null>(null);
+  phaseRef.current = view?.phase ?? null;
 
   useEffect(() => {
     setTok(getToken(code));
@@ -41,11 +49,13 @@ export default function Room({ code }: { code: string }) {
     if (!token) return;
     let stopped = false;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let lastPoll = 0;
     const controllers = new Set<AbortController>();
 
     const poll = async () => {
       const ac = new AbortController();
       controllers.add(ac);
+      lastPoll = Date.now();
       try {
         const next = await api<PlayerView>(`/api/room/${code}/state`, { token, signal: ac.signal });
         if (stopped) return;
@@ -64,11 +74,15 @@ export default function Room({ code }: { code: string }) {
         controllers.delete(ac);
       }
     };
+    const tick = () => {
+      if (phaseRef.current === "ended" && Date.now() - lastPoll < ENDED_POLL_MS) return;
+      void poll();
+    };
 
     const start = () => {
       if (timer) return;
       void poll();
-      timer = setInterval(poll, POLL_MS);
+      timer = setInterval(tick, POLL_MS);
     };
     const stop = () => {
       if (timer) clearInterval(timer);
@@ -213,6 +227,10 @@ function useAction({ view, token, onView }: PhaseProps) {
   return { busy, error, run };
 }
 
+function modeLabel(s: RoomSettings): string {
+  return s.mode === "drawing" ? `Disegno · ${s.rounds} turni` : "Classica · 8 domande";
+}
+
 // ---------- lobby ----------
 
 function Lobby(props: PhaseProps) {
@@ -284,13 +302,20 @@ function Lobby(props: PhaseProps) {
 
 // ---------- impostazioni (host) ----------
 
+const ROUND_OPTIONS = Array.from({ length: LIMITS.rounds.max - LIMITS.rounds.min + 1 }, (_, i) => LIMITS.rounds.min + i);
+
 function SettingsSummary({ settings }: { settings: RoomSettings }) {
+  const drawing = settings.mode === "drawing";
   return (
     <ul className="settings-summary">
+      <li>Modalità: {modeLabel(settings)}</li>
       <li>
         Giocatori: da {settings.minPlayers} a {settings.maxPlayers}
       </li>
-      <li>Tempo per round: {Math.round(settings.roundMs / 1000)}s</li>
+      <li>
+        Tempo per round: {Math.round(settings.roundMs / 1000)}s
+        {drawing && ` (disegno: ${Math.round((settings.roundMs + DRAW_EXTRA_MS) / 1000)}s)`}
+      </li>
       <li>Caratteri per risposta: {settings.maxAnswerLen}</li>
     </ul>
   );
@@ -304,7 +329,7 @@ function Settings(props: PhaseProps) {
 
   // Le impostazioni salvate (anche da un altro tab dell'host) riallineano il form.
   const saved = view.settings;
-  const savedKey = `${saved.minPlayers}|${saved.maxPlayers}|${saved.roundMs}|${saved.maxAnswerLen}`;
+  const savedKey = (Object.keys(saved) as (keyof RoomSettings)[]).map((k) => saved[k]).join("|");
   useEffect(() => setDraft(saved), [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = (Object.keys(saved) as (keyof RoomSettings)[]).some((k) => draft[k] !== saved[k]);
@@ -330,6 +355,50 @@ function Settings(props: PhaseProps) {
         <SettingsSummary settings={saved} />
       ) : (
         <>
+          <fieldset className="choice">
+            <legend>Modalità</legend>
+            <div className="seg" role="radiogroup" aria-label="Modalità">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={draft.mode === "classic"}
+                onClick={() => set({ mode: "classic", rounds: SLOTS })}
+              >
+                <strong>Classica</strong>
+                <span>8 domande, una storia</span>
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={draft.mode === "drawing"}
+                onClick={() => set({ mode: "drawing", rounds: saved.mode === "drawing" ? saved.rounds : 6 })}
+              >
+                <strong>Disegno</strong>
+                <span>descrivi → disegna → descrivi…</span>
+              </button>
+            </div>
+            {draft.mode === "drawing" && (
+              <div className="rounds-row">
+                <span id="set-rounds-label" className="field-label">
+                  Turni
+                </span>
+                <div className="seg seg-compact" role="radiogroup" aria-labelledby="set-rounds-label">
+                  {ROUND_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      role="radio"
+                      aria-checked={draft.rounds === n}
+                      onClick={() => set({ rounds: n })}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </fieldset>
+
           <div className="field-row">
             <div className="field">
               <label htmlFor="set-min">Giocatori minimi</label>
@@ -375,7 +444,8 @@ function Settings(props: PhaseProps) {
               onChange={(e) => set({ roundMs: Number(e.target.value) * 1000 })}
             />
             <p className="muted">
-              Passato il tempo si va alla domanda successiva anche senza tutte le risposte.
+              Passato il tempo si va al turno successivo anche senza tutte le risposte.
+              {draft.mode === "drawing" && ` I turni di disegno hanno ${DRAW_EXTRA_MS / 1000}s in più.`}
             </p>
           </div>
 
@@ -421,24 +491,49 @@ function Settings(props: PhaseProps) {
 
 // ---------- round ----------
 
+const OK_LATE = ["ALREADY_ANSWERED", "ROUND_OVER"]; // il prossimo polling porta la vista giusta
+
 function Round(props: PhaseProps) {
   const { view } = props;
   const { busy, error, run } = useAction(props);
   const [text, setText] = useState("");
+  const [drawing, setDrawing] = useState<Drawing>([]);
+  const autoSent = useRef(false);
+  const left = useCountdown(view.roundEndsAt, view.serverNow);
+  const isDrawing = view.kind === "drawing";
   const maxLen = view.settings.maxAnswerLen;
 
   // nuovo round (o nuova partita) = foglio pulito
-  useEffect(() => setText(""), [view.round, view.game]);
+  useEffect(() => {
+    setText("");
+    setDrawing([]);
+    autoSent.current = false;
+  }, [view.round, view.game]);
 
   const send = () => {
-    if (!text.trim()) return;
-    void run("/answer", { text: text.trim() }, ["ALREADY_ANSWERED"]);
+    if (isDrawing) {
+      if (drawing.length === 0) return;
+      void run("/answer", { text: serializeDrawing(drawing), round: view.round }, OK_LATE);
+    } else {
+      if (!text.trim()) return;
+      void run("/answer", { text: text.trim(), round: view.round }, OK_LATE);
+    }
   };
+
+  // Disegno: a pochi secondi dalla fine si invia quello che c'è.
+  useEffect(() => {
+    if (!isDrawing || view.me.answered || busy || autoSent.current) return;
+    if (left > 0 && left <= AUTOSEND_S && drawing.length > 0) {
+      autoSent.current = true;
+      send();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [left]);
 
   const header = (
     <div className="round-head">
       <p className="eyebrow">
-        Round {view.round + 1} di {SLOTS}
+        Round {view.round + 1} di {view.slots}
       </p>
       <Timer roundEndsAt={view.roundEndsAt} serverNow={view.serverNow} />
     </div>
@@ -448,7 +543,7 @@ function Round(props: PhaseProps) {
     return (
       <>
         {header}
-        <h1 className="title">Risposta inviata</h1>
+        <h1 className="title">{isDrawing ? "Disegno inviato" : "Risposta inviata"}</h1>
         <p className="lead" aria-live="polite">
           {view.answeredCount}/{view.total} hanno risposto. Si aspettano gli altri.
         </p>
@@ -463,24 +558,32 @@ function Round(props: PhaseProps) {
     <>
       {header}
       <h1 className="prompt">{view.prompt ?? PROMPTS[view.round]}</h1>
-      <div className="field">
-        <label className="sr-only" htmlFor="answer">
-          La tua risposta
-        </label>
-        <textarea
-          id="answer"
-          value={text}
-          maxLength={maxLen}
-          autoFocus
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === "Enter" && send()}
-        />
-        <p className="counter" data-warn={text.length > maxLen - 20} aria-live="polite">
-          {text.length}/{maxLen}
-        </p>
-      </div>
+
+      {view.mode === "drawing" && view.round > 0 && <Previous view={view} />}
+
+      {isDrawing ? (
+        <DrawBoard value={drawing} onChange={setDrawing} disabled={busy} />
+      ) : (
+        <div className="field">
+          <label className="sr-only" htmlFor="answer">
+            La tua risposta
+          </label>
+          <textarea
+            id="answer"
+            value={text}
+            maxLength={maxLen}
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === "Enter" && send()}
+          />
+          <p className="counter" data-warn={text.length > maxLen - 20} aria-live="polite">
+            {text.length}/{maxLen}
+          </p>
+        </div>
+      )}
+
       <div className="actions">
-        <Button block loading={busy} disabled={!text.trim()} onClick={send}>
+        <Button block loading={busy} disabled={isDrawing ? drawing.length === 0 : !text.trim()} onClick={send}>
           Invia
         </Button>
       </div>
@@ -492,6 +595,26 @@ function Round(props: PhaseProps) {
       </p>
     </>
   );
+}
+
+/** Drawing: il passaggio precedente del foglietto in mano (testo da disegnare o disegno da descrivere). */
+function Previous({ view }: { view: PlayerView }) {
+  const prevKind = slotKind(view.mode, view.round - 1);
+  if (view.previous === null) {
+    return (
+      <PaperCard flat>
+        <p className="muted">Il passaggio precedente è andato perso (tempo scaduto): improvvisa!</p>
+      </PaperCard>
+    );
+  }
+  if (prevKind === "text") {
+    return (
+      <PaperCard flat>
+        <p className="quote">«{view.previous}»</p>
+      </PaperCard>
+    );
+  }
+  return <DrawingView data={view.previous} label="Disegno da descrivere" />;
 }
 
 // ---------- reveal ----------
@@ -514,31 +637,70 @@ function Sheet({ parts, flat, unfoldKey }: { parts: string[]; flat?: boolean; un
   );
 }
 
+/** Autore del passaggio `step` del foglietto `sheet`: inverso di sheetFor. */
+function authorOf(players: PlayerPublic[], sheet: number, step: number): string {
+  return players[(sheet + step) % players.length]?.name ?? "?";
+}
+
+/** Drawing: la catena descrizione → disegno → … di un foglietto, con gli autori. */
+function Chain({ parts, sheet, view }: { parts: string[]; sheet: number; view: PlayerView }) {
+  const last = parts.length - 1;
+  return (
+    <ol className="chain">
+      {parts.map((v, step) => {
+        const kind = slotKind(view.mode, step);
+        const who = authorOf(view.players, sheet, step);
+        return (
+          <li key={step} className={step === last ? "chain-step paper-unfold" : "chain-step"}>
+            <p className="eyebrow">
+              {step + 1}. {who} {kind === "drawing" ? "ha disegnato" : "ha scritto"}
+            </p>
+            {kind === "drawing" ? (
+              <DrawingView data={v} label={`Disegno di ${who}`} />
+            ) : (
+              <p className="quote">{v === EMPTY ? EMPTY : `«${v}»`}</p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function Reveal(props: PhaseProps) {
   const { view } = props;
   const { busy, error, run } = useAction(props);
   const reveal = view.reveal;
   if (!reveal) return null;
 
+  const drawing = view.mode === "drawing";
   const current = reveal.sheets[reveal.index];
   const previous = reveal.sheets.slice(0, reveal.index);
-  const last = reveal.index >= reveal.total - 1;
+  const lastSheet = reveal.index >= reveal.total - 1;
+  const lastStep = !drawing || reveal.step >= view.slots - 1;
+  const last = lastSheet && lastStep;
 
   return (
     <>
       <p className="eyebrow">
         Foglietto {reveal.index + 1} di {reveal.total}
+        {drawing && ` · passaggio ${reveal.step + 1} di ${view.slots}`}
       </p>
-      {current && <Sheet parts={current} unfoldKey={reveal.index} />}
+      {current &&
+        (drawing ? (
+          <Chain parts={current} sheet={reveal.index} view={view} />
+        ) : (
+          <Sheet parts={current} unfoldKey={reveal.index} />
+        ))}
 
       <div className="actions">
         {view.me.isHost ? (
           <Button block loading={busy} onClick={() => run("/advance")}>
-            {last ? "Fine" : "Prossima"}
+            {last ? "Fine" : lastStep ? "Prossimo foglietto" : "Prossimo"}
           </Button>
         ) : (
           <p className="muted" aria-live="polite">
-            L&apos;host sta leggendo…
+            L&apos;host sta {drawing ? "svelando" : "leggendo"}…
           </p>
         )}
       </div>
@@ -549,11 +711,11 @@ function Reveal(props: PhaseProps) {
       {previous.length > 0 && (
         <>
           <hr className="rule" />
-          <h2>Già letti</h2>
+          <h2>Già {drawing ? "svelati" : "letti"}</h2>
           <ul className="sheet-list">
             {previous.map((parts, i) => (
               <li key={i}>
-                <p className="sentence">{composeSentence(parts)}</p>
+                <p className="sentence">{drawing ? `${i + 1}. «${parts[0]}»` : composeSentence(parts)}</p>
               </li>
             ))}
           </ul>
@@ -566,16 +728,30 @@ function Reveal(props: PhaseProps) {
 // ---------- ended ----------
 
 function exportJson(view: PlayerView, sheets: string[][]) {
-  const data = {
-    stanza: view.code,
-    partita: view.game,
-    esportatoIl: new Date().toISOString(),
-    domande: PROMPTS,
-    sigarette: sheets.map((parts) => ({
-      frase: composeSentence(parts),
-      risposte: Object.fromEntries(PROMPTS.map((label, i) => [label, parts[i]])),
-    })),
-  };
+  const base = { stanza: view.code, partita: view.game, esportatoIl: new Date().toISOString() };
+  const data =
+    view.mode === "drawing"
+      ? {
+          ...base,
+          modalita: "disegno",
+          turni: view.slots,
+          catene: sheets.map((parts, sheet) => ({
+            passaggi: parts.map((contenuto, step) => ({
+              autore: authorOf(view.players, sheet, step),
+              tipo: slotKind(view.mode, step) === "drawing" ? "disegno" : "testo",
+              contenuto,
+            })),
+          })),
+        }
+      : {
+          ...base,
+          modalita: "classica",
+          domande: PROMPTS,
+          sigarette: sheets.map((parts) => ({
+            frase: composeSentence(parts),
+            risposte: Object.fromEntries(PROMPTS.map((label, i) => [label, parts[i]])),
+          })),
+        };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
   const a = document.createElement("a");
   a.href = url;
@@ -593,11 +769,16 @@ function Ended(props: PhaseProps) {
 
   return (
     <>
-      <h1 className="title">Le storie</h1>
+      <h1 className="title">{view.mode === "drawing" ? "Le catene" : "Le storie"}</h1>
       <p className="eyebrow" aria-live="polite">
         Foglietto {index + 1} di {sheets.length}
       </p>
-      {current && <Sheet parts={current} unfoldKey={index} />}
+      {current &&
+        (view.mode === "drawing" ? (
+          <Chain key={index} parts={current} sheet={index} view={view} />
+        ) : (
+          <Sheet parts={current} unfoldKey={index} />
+        ))}
 
       <div className="row row-nav">
         <Button variant="ghost" disabled={index === 0} onClick={() => setIndex(index - 1)}>

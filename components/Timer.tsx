@@ -9,10 +9,11 @@ interface Props {
 }
 
 /**
- * L'offset server−client viene fissato al primo render utile: ricalcolarlo a
- * ogni polling farebbe saltellare il countdown avanti e indietro con la latenza.
+ * Secondi rimanenti alla fine del round. L'offset server−client viene fissato al primo
+ * render utile: ricalcolarlo a ogni polling farebbe saltellare il countdown avanti e
+ * indietro con la latenza.
  */
-export default function Timer({ roundEndsAt, serverNow }: Props) {
+export function useCountdown(roundEndsAt: number | null, serverNow: number): number {
   const offset = useRef<number | null>(null);
   if (offset.current === null) offset.current = serverNow - Date.now();
 
@@ -27,6 +28,12 @@ export default function Timer({ roundEndsAt, serverNow }: Props) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roundEndsAt]);
+
+  return left;
+}
+
+export default function Timer({ roundEndsAt, serverNow }: Props) {
+  const left = useCountdown(roundEndsAt, serverNow);
 
   if (roundEndsAt === null) return null;
 

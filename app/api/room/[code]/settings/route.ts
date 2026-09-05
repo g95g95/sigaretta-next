@@ -4,7 +4,7 @@ import type { RoomSettings, SettingsPatch } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const KEYS: (keyof RoomSettings)[] = ["minPlayers", "maxPlayers", "roundMs", "maxAnswerLen"];
+const KEYS: (keyof RoomSettings)[] = ["mode", "rounds", "minPlayers", "maxPlayers", "roundMs", "maxAnswerLen"];
 
 /** Tiene solo le chiavi note e presenti; i valori li valida il reducer. */
 function toPatch(body: unknown): SettingsPatch {
