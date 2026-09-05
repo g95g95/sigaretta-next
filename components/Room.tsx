@@ -7,8 +7,8 @@ import PaperCard from "@/components/PaperCard";
 import PlayerList from "@/components/PlayerList";
 import Timer from "@/components/Timer";
 import { ApiClientError, api, clearToken, errorMessage, getToken, setToken } from "@/lib/client";
-import { MAX_ANSWER_LEN, MAX_NAME_LEN, MIN_PLAYERS, PROMPTS, SLOTS, composeSentence } from "@/lib/prompts";
-import type { JoinResponse, PlayerView } from "@/lib/types";
+import { LIMITS, MAX_NAME_LEN, PROMPTS, SLOTS, composeSentence } from "@/lib/prompts";
+import type { JoinResponse, PlayerView, RoomSettings } from "@/lib/types";
 
 const POLL_MS = 2000;
 
@@ -230,7 +230,8 @@ function Lobby(props: PhaseProps) {
     }
   };
 
-  const few = view.players.length < MIN_PLAYERS;
+  const min = view.settings.minPlayers;
+  const few = view.players.length < min;
 
   return (
     <>
@@ -245,7 +246,9 @@ function Lobby(props: PhaseProps) {
 
       <hr className="rule" />
 
-      <h2>Giocatori ({view.players.length})</h2>
+      <h2>
+        Giocatori ({view.players.length}/{view.settings.maxPlayers})
+      </h2>
       <PaperCard>
         <PlayerList players={view.players} meId={view.me.id} />
       </PaperCard>
@@ -261,10 +264,157 @@ function Lobby(props: PhaseProps) {
           </p>
         )}
       </div>
-      {view.me.isHost && few && <p className="muted">Servono almeno {MIN_PLAYERS} giocatori.</p>}
+      {view.me.isHost && few && <p className="muted">Servono almeno {min} giocatori.</p>}
       <p className="error" role="alert" aria-live="polite">
         {error}
       </p>
+
+      {view.me.isHost ? (
+        <Settings {...props} />
+      ) : (
+        <>
+          <hr className="rule" />
+          <h2>Impostazioni</h2>
+          <SettingsSummary settings={view.settings} />
+        </>
+      )}
+    </>
+  );
+}
+
+// ---------- impostazioni (host) ----------
+
+function SettingsSummary({ settings }: { settings: RoomSettings }) {
+  return (
+    <ul className="settings-summary">
+      <li>
+        Giocatori: da {settings.minPlayers} a {settings.maxPlayers}
+      </li>
+      <li>Tempo per round: {Math.round(settings.roundMs / 1000)}s</li>
+      <li>Caratteri per risposta: {settings.maxAnswerLen}</li>
+    </ul>
+  );
+}
+
+function Settings(props: PhaseProps) {
+  const { view } = props;
+  const { busy, error, run } = useAction(props);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<RoomSettings>(view.settings);
+
+  // Le impostazioni salvate (anche da un altro tab dell'host) riallineano il form.
+  const saved = view.settings;
+  const savedKey = `${saved.minPlayers}|${saved.maxPlayers}|${saved.roundMs}|${saved.maxAnswerLen}`;
+  useEffect(() => setDraft(saved), [savedKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const dirty = (Object.keys(saved) as (keyof RoomSettings)[]).some((k) => draft[k] !== saved[k]);
+  const set = (patch: Partial<RoomSettings>) => setDraft((d) => ({ ...d, ...patch }));
+  const num = (v: string, fallback: number) => (v === "" ? fallback : Number(v));
+
+  const players = Array.from(
+    { length: LIMITS.players.max - LIMITS.players.min + 1 },
+    (_, i) => LIMITS.players.min + i,
+  );
+
+  return (
+    <>
+      <hr className="rule" />
+      <div className="row row-head">
+        <h2>Impostazioni</h2>
+        <Button variant="ghost" onClick={() => setOpen(!open)} aria-expanded={open}>
+          {open ? "Chiudi" : "Modifica"}
+        </Button>
+      </div>
+
+      {!open ? (
+        <SettingsSummary settings={saved} />
+      ) : (
+        <>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="set-min">Giocatori minimi</label>
+              <select
+                id="set-min"
+                value={draft.minPlayers}
+                onChange={(e) => set({ minPlayers: Number(e.target.value) })}
+              >
+                {players.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="set-max">Giocatori massimi</label>
+              <select
+                id="set-max"
+                value={draft.maxPlayers}
+                onChange={(e) => set({ maxPlayers: Number(e.target.value) })}
+              >
+                {players.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="field">
+            <label htmlFor="set-time">
+              Tempo per round: {Math.round(draft.roundMs / 1000)}s
+            </label>
+            <input
+              id="set-time"
+              type="range"
+              min={LIMITS.roundMs.min / 1000}
+              max={LIMITS.roundMs.max / 1000}
+              step={LIMITS.roundMs.step / 1000}
+              value={Math.round(draft.roundMs / 1000)}
+              onChange={(e) => set({ roundMs: Number(e.target.value) * 1000 })}
+            />
+            <p className="muted">
+              Passato il tempo si va alla domanda successiva anche senza tutte le risposte.
+            </p>
+          </div>
+
+          <div className="field">
+            <label htmlFor="set-len">Caratteri per risposta</label>
+            <input
+              id="set-len"
+              type="number"
+              inputMode="numeric"
+              min={LIMITS.answerLen.min}
+              max={LIMITS.answerLen.max}
+              step={LIMITS.answerLen.step}
+              value={draft.maxAnswerLen}
+              onChange={(e) => set({ maxAnswerLen: num(e.target.value, saved.maxAnswerLen) })}
+            />
+            <p className="muted">
+              Da {LIMITS.answerLen.min} a {LIMITS.answerLen.max}.
+            </p>
+          </div>
+
+          <div className="row row-nav">
+            <Button variant="ghost" disabled={!dirty} onClick={() => setDraft(saved)}>
+              Annulla
+            </Button>
+            <Button
+              loading={busy}
+              disabled={!dirty}
+              onClick={async () => {
+                if (await run("/settings", draft)) setOpen(false);
+              }}
+            >
+              Salva
+            </Button>
+          </div>
+          <p className="error" role="alert" aria-live="polite">
+            {error}
+          </p>
+        </>
+      )}
     </>
   );
 }
@@ -275,6 +425,7 @@ function Round(props: PhaseProps) {
   const { view } = props;
   const { busy, error, run } = useAction(props);
   const [text, setText] = useState("");
+  const maxLen = view.settings.maxAnswerLen;
 
   // nuovo round (o nuova partita) = foglio pulito
   useEffect(() => setText(""), [view.round, view.game]);
@@ -319,13 +470,13 @@ function Round(props: PhaseProps) {
         <textarea
           id="answer"
           value={text}
-          maxLength={MAX_ANSWER_LEN}
+          maxLength={maxLen}
           autoFocus
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === "Enter" && send()}
         />
-        <p className="counter" data-warn={text.length > MAX_ANSWER_LEN - 20} aria-live="polite">
-          {text.length}/{MAX_ANSWER_LEN}
+        <p className="counter" data-warn={text.length > maxLen - 20} aria-live="polite">
+          {text.length}/{maxLen}
         </p>
       </div>
       <div className="actions">

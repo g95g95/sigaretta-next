@@ -16,7 +16,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 ## Struttura
 
 - `lib/types.ts` — contratto condiviso (tipi, azioni, contratto HTTP): non modificare senza aggiornare tutti i consumer.
-- `lib/prompts.ts` — costanti di gioco e gli 8 prompt fissi.
+- `lib/prompts.ts` — costanti di gioco, default/limiti delle impostazioni di stanza e gli 8 prompt fissi.
 - `lib/game.ts` — reducer puro delle regole di gioco, con `lib/game.test.ts`.
 - `lib/store.ts` — store della stanza (Redis o memoria) con scrittura CAS (compare-and-swap).
 - `lib/api.ts` — helper condivisi dalle route handler.
@@ -35,6 +35,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - UI in italiano, mobile-first.
 - La UI legge lo stato solo via polling `GET state` ogni 2s, sospeso quando il tab è nascosto; ogni POST adotta subito la `PlayerView` restituita.
 - Il countdown fissa l'offset `serverNow − Date.now()` una volta per view: ricalcolarlo a ogni polling farebbe saltellare il timer.
+- Le impostazioni di stanza (min/max giocatori, tempo per round, caratteri per risposta) vivono in `RoomState.settings`: leggerle sempre con `settingsOf(state)`, che copre le stanze salvate prima della loro introduzione.
 - Nessun uso di localStorage oltre al token della stanza.
 - Nessuna feature extra fuori scope (account, chat, salvataggio partite).
 

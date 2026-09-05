@@ -12,6 +12,17 @@ export interface Player {
   lastSeen: number; // ms epoch dell'ultimo polling
 }
 
+/** Impostazioni della stanza, modificabili dall'host in lobby. */
+export interface RoomSettings {
+  minPlayers: number; // giocatori minimi per avviare la partita
+  maxPlayers: number; // capienza della stanza
+  roundMs: number; // tempo massimo di attesa per round, in ms
+  maxAnswerLen: number; // caratteri massimi per risposta
+}
+
+/** Aggiornamento parziale: i campi omessi restano invariati. */
+export type SettingsPatch = Partial<RoomSettings>;
+
 export interface RoomState {
   code: string;
   version: number; // incrementato dallo store a ogni write (lock ottimistico)
@@ -19,6 +30,7 @@ export interface RoomState {
   game: number; // contatore partite (parte da 1)
   phase: Phase;
   hostId: string;
+  settings: RoomSettings;
   players: Player[]; // l'indice = seat
   round: number; // 0–7, valido in phase "round"
   roundEndsAt: number | null;
@@ -36,6 +48,7 @@ export type Action =
   | { type: "seen"; playerId: string; now: number } // polling: aggiorna lastSeen + settle
   | { type: "tick"; now: number } // solo settle (timeout round, host migration)
   | { type: "start"; playerId: string; now: number } // solo host, da lobby
+  | { type: "settings"; playerId: string; patch: SettingsPatch; now: number } // solo host, in lobby
   | { type: "answer"; playerId: string; text: string; now: number }
   | { type: "advance"; playerId: string; now: number } // solo host, in reveal: prossimo foglietto / fine
   | { type: "restart"; playerId: string; now: number }; // solo host, da reveal/ended → lobby
@@ -50,6 +63,7 @@ export type GameErrorCode =
   | "NAME_TAKEN"
   | "INVALID_NAME"
   | "INVALID_ANSWER"
+  | "INVALID_SETTINGS"
   | "ALREADY_ANSWERED"
   | "WRONG_PHASE"
   | "CONFLICT";
@@ -77,6 +91,7 @@ export interface PlayerView {
   game: number;
   phase: Phase;
   serverNow: number;
+  settings: RoomSettings;
   me: { id: string; name: string; isHost: boolean; answered: boolean };
   players: PlayerPublic[];
   round: number; // 0–7
@@ -98,6 +113,7 @@ export interface PlayerView {
 // POST /api/room/[code]/answer        body {text}        → 200 PlayerView
 // POST /api/room/[code]/advance                          → 200 PlayerView
 // POST /api/room/[code]/start                            → 200 PlayerView
+// POST /api/room/[code]/settings     body SettingsPatch    → 200 PlayerView   (solo host, in lobby)
 // POST /api/room/[code]/restart                          → 200 PlayerView
 
 export interface JoinResponse {
