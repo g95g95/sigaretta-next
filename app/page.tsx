@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@/components/Button";
+import InstallApp from "@/components/InstallApp";
 import { api, errorMessage, getToken, setToken } from "@/lib/client";
 import { DEFAULT_ROUNDS, MAX_NAME_LEN, MAX_ROOM_NAME_LEN, MAX_ROUNDS, MIN_ROUNDS } from "@/lib/prompts";
 import type { GameMode, JoinResponse } from "@/lib/types";
@@ -159,6 +160,7 @@ export default function Home() {
       <p className="error" role="alert" aria-live="polite">
         {error}
       </p>
+      <InstallApp />
     </main>
   );
 }

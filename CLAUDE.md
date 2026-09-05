@@ -49,3 +49,11 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - Nessuna feature extra fuori scope (account, chat, salvataggio partite).
 
 Prima di dichiarare un task finito: `npm test` e `npm run build` devono essere verdi.
+
+## PWA
+
+Manifest nativo in app/manifest.ts; icone in public/icons, sorgente in assets.
+InstallApp propone installazione e istruzioni nella home; PwaRegistration
+registra il service worker solo in produzione. Il worker salva esclusivamente
+la pagina offline, mai API, token, stanze o risposte. Il multiplayer richiede rete.
+Vedere AGENTS.md per le convenzioni e lib/pwa.test.ts per le regressioni.

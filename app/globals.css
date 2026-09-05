@@ -804,3 +804,15 @@ input[type="range"] {
     transition-duration: 0.01ms !important;
   }
 }
+
+.install-app {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  margin-top: 1.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--line);
+}
+.install-app img { flex-shrink: 0; border-radius: 10px; }
+.install-app p { margin: 0.4rem 0 0.7rem; }
+.install-app summary { cursor: pointer; min-height: 44px; padding-block: 8px; }

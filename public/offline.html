@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4efe4">
+  <title>Sei offline · La Sigaretta</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #f4efe4; color: #1f1b16; font: 18px/1.6 Georgia, serif; }
+    main { max-width: 28rem; }
+    h1 { font-size: 2rem; line-height: 1.2; }
+    button { padding: 12px 24px; min-height: 48px; background: #b3412a; color: white; border: 0; border-radius: 12px; font: inherit; cursor: pointer; }
+    a { color: #b3412a; display: inline-block; padding: 12px; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #1f1b16; outline-offset: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p>La Sigaretta</p>
+    <h1>Il foglietto aspetta la connessione.</h1>
+    <p>Sei offline. Per entrare in una stanza e giocare con gli altri serve Internet.</p>
+    <p>Quando torna la connessione, riprova ad aprire questa pagina.</p>
+    <button type="button" onclick="window.location.reload()">Riprova</button>
+    <a href="/">Torna alla home</a>
+  </main>
+</body>
+</html>

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Caveat, Fraunces } from "next/font/google";
 import "./globals.css";
+import PwaRegistration from "@/components/PwaRegistration";
 
 const hand = Caveat({
   subsets: ["latin"],
@@ -18,6 +19,9 @@ const serif = Fraunces({
 
 export const metadata: Metadata = {
   title: "La Sigaretta",
+  applicationName: "La Sigaretta",
+  appleWebApp: { capable: true, title: "Sigaretta", statusBarStyle: "default" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
   description:
     "Il gioco della sigaretta: otto domande, un foglietto che gira, e alla fine si leggono le storie assurde che ne escono.",
 };
@@ -30,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="it" className={`${hand.variable} ${serif.variable}`}>
       <body>
+        <PwaRegistration />
         <div className="shell">{children}</div>
       </body>
     </html>

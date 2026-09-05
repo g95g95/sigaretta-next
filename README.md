@@ -45,3 +45,22 @@ Senza le env Upstash configurate, l'app usa uno store in memoria valido solo in 
 - La cecità sui bigliettini è garantita lato server: il client non riceve mai risposte non ancora rivelate.
 - Se l'host resta silente per 30 secondi, il ruolo passa automaticamente a un altro giocatore connesso.
 - Il token del giocatore è salvato in localStorage per permettere di rientrare nella stanza.
+
+## PWA su cellulare
+
+La home offre l'installazione quando il browser la supporta e istruzioni alternative.
+Su iPhone aprire il sito in Safari, scegliere Condividi e Aggiungi alla schermata
+Home; lasciare attivo Apri come app web se presente. Su Android usare il pulsante
+Installa l'app quando disponibile oppure il menu del browser.
+
+Le partite richiedono Internet. Il service worker conserva solo la schermata
+offline: non salva stanze, risposte o token e non accoda invii offline.
+Il worker viene registrato solo in produzione (`npm run build`, `npm start`).
+Per provarlo sul telefono usare un sito HTTPS; localhost e' valido per i test
+sul computer, un indirizzo HTTP della rete locale non e' equivalente.
+Gli aggiornamenti del worker si attivano dopo la chiusura delle vecchie pagine.
+L'installazione non trasferisce necessariamente la sessione di una stanza dal
+browser all'app: conviene installare prima di entrare in partita.
+
+Riferimenti: https://nextjs.org/docs/app/guides/progressive-web-apps
+ e https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios
