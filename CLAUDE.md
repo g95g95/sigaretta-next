@@ -16,7 +16,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 ## Struttura
 
 - `lib/types.ts` — contratto condiviso (tipi, azioni, contratto HTTP): non modificare senza aggiornare tutti i consumer.
-- `lib/prompts.ts` — costanti di gioco, default/limiti delle impostazioni di stanza, gli 8 prompt fissi e gli helper per modalità/slot (`slotKind`, `promptFor`, `roundDuration`).
+- `lib/prompts.ts` — costanti di gioco, default/limiti delle impostazioni di stanza (incluso `MAX_ROOM_NAME_LEN`), gli 8 prompt fissi e gli helper per modalità/slot (`slotKind`, `promptFor`, `roundDuration`).
 - `lib/drawing.ts` — formato dei disegni (tratti vettoriali su griglia 400x400, delta-encoded), `serializeDrawing`/`parseDrawing`.
 - `lib/game.ts` — reducer puro delle regole di gioco, con `lib/game.test.ts`.
 - `lib/store.ts` — store della stanza (Redis o memoria) con scrittura CAS (compare-and-swap).
@@ -44,7 +44,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - UI in italiano, mobile-first.
 - La UI legge lo stato solo via polling `GET state` ogni 2s (5s in `ended`, dove la vista contiene tutti i disegni), sospeso quando il tab è nascosto; ogni POST adotta subito la `PlayerView` restituita.
 - Il countdown fissa l'offset `serverNow − Date.now()` una volta per view: ricalcolarlo a ogni polling farebbe saltellare il timer.
-- Le impostazioni di stanza (modalità, turni, min/max giocatori, tempo per round, caratteri per risposta) vivono in `RoomState.settings`: leggerle sempre con `settingsOf(state)`, che completa con i default le stanze salvate prima (anche per singolo campo).
+- Le impostazioni di stanza (nome stanza, modalità, turni, min/max giocatori, tempo per round, caratteri per risposta) vivono in `RoomState.settings`: leggerle sempre con `settingsOf(state)`, che completa con i default le stanze salvate prima (anche per singolo campo).
 - Nessun uso di localStorage oltre al token della stanza.
 - Nessuna feature extra fuori scope (account, chat, salvataggio partite).
 

@@ -25,6 +25,7 @@ export const MAX_PLAYERS = 10;
 export const MAX_ANSWER_LEN = 120;
 
 export const DEFAULT_SETTINGS: RoomSettings = {
+  roomName: "",
   mode: "classic",
   rounds: SLOTS,
   minPlayers: MIN_PLAYERS,
@@ -42,6 +43,7 @@ export const LIMITS = {
 } as const;
 
 export const MAX_NAME_LEN = 20;
+export const MAX_ROOM_NAME_LEN = 30;
 export const CONNECTED_MS = 10_000; // lastSeen entro 10s = connesso
 export const HOST_TIMEOUT_MS = 30_000; // host silente da >30s = migrazione
 export const ROOM_TTL_S = 24 * 60 * 60;

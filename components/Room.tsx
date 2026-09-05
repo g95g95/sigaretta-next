@@ -11,7 +11,7 @@ import Timer, { useCountdown } from "@/components/Timer";
 import { ApiClientError, api, clearToken, errorMessage, getToken, setToken } from "@/lib/client";
 import { serializeDrawing } from "@/lib/drawing";
 import type { Drawing } from "@/lib/drawing";
-import { DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_NAME_LEN, PROMPTS, SLOTS, composeSentence, slotKind } from "@/lib/prompts";
+import { DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_NAME_LEN, MAX_ROOM_NAME_LEN, PROMPTS, SLOTS, composeSentence, slotKind } from "@/lib/prompts";
 import type { JoinResponse, PlayerPublic, PlayerView, RoomSettings } from "@/lib/types";
 
 const POLL_MS = 2000;
@@ -251,8 +251,11 @@ function Lobby(props: PhaseProps) {
   const min = view.settings.minPlayers;
   const few = view.players.length < min;
 
+  const roomName = view.settings.roomName.trim();
+
   return (
     <>
+      <h1 className="title">{roomName || `Stanza ${view.code}`}</h1>
       <p className="eyebrow">Codice stanza</p>
       <p className="room-code">{view.code}</p>
 
@@ -308,6 +311,7 @@ function SettingsSummary({ settings }: { settings: RoomSettings }) {
   const drawing = settings.mode === "drawing";
   return (
     <ul className="settings-summary">
+      <li>Nome: {settings.roomName.trim() || "senza nome"}</li>
       <li>Modalità: {modeLabel(settings)}</li>
       <li>
         Giocatori: da {settings.minPlayers} a {settings.maxPlayers}
@@ -355,6 +359,18 @@ function Settings(props: PhaseProps) {
         <SettingsSummary settings={saved} />
       ) : (
         <>
+          <div className="field">
+            <label htmlFor="set-room-name">Nome della stanza</label>
+            <input
+              id="set-room-name"
+              type="text"
+              value={draft.roomName}
+              maxLength={MAX_ROOM_NAME_LEN}
+              placeholder="Facoltativo"
+              onChange={(e) => set({ roomName: e.target.value })}
+            />
+          </div>
+
           <fieldset className="choice">
             <legend>Modalità</legend>
             <div className="seg" role="radiogroup" aria-label="Modalità">

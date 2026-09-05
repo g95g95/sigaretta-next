@@ -12,12 +12,18 @@ const MAX_CODE_TRIES = 10;
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    const { name, mode, rounds } = await readBody<{ name?: unknown; mode?: unknown; rounds?: unknown }>(req);
+    const { name, roomName, mode, rounds } = await readBody<{
+      name?: unknown;
+      roomName?: unknown;
+      mode?: unknown;
+      rounds?: unknown;
+    }>(req);
     // Il reducer non valida il nome dell'host in "create": lo facciamo qui.
     const clean = typeof name === "string" ? name.trim() : "";
     if (clean.length < 1 || clean.length > MAX_NAME_LEN) throw new GameError("INVALID_NAME");
-    // Impostazioni iniziali (solo modalità e turni; il resto ai default). Le valida il reducer.
+    // Impostazioni iniziali (nome stanza, modalità e turni; il resto ai default). Le valida il reducer.
     const settings: SettingsPatch = {};
+    if (roomName !== undefined) settings.roomName = roomName as string;
     if (mode !== undefined) settings.mode = mode as GameMode;
     if (rounds !== undefined) settings.rounds = rounds as number;
 

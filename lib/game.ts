@@ -8,6 +8,7 @@ import {
   HOST_TIMEOUT_MS,
   LIMITS,
   MAX_NAME_LEN,
+  MAX_ROOM_NAME_LEN,
   SLOTS,
   promptFor,
   roundDuration,
@@ -40,7 +41,12 @@ export function applySettings(
   if (mode !== "classic" && mode !== "drawing") {
     throw new GameError("INVALID_SETTINGS", "Modalità sconosciuta");
   }
+  const roomName = typeof patch.roomName === "string" ? patch.roomName.trim() : current.roomName;
+  if (roomName.length > MAX_ROOM_NAME_LEN) {
+    throw new GameError("INVALID_SETTINGS", "Nome della stanza troppo lungo");
+  }
   const next: RoomSettings = {
+    roomName,
     mode,
     // classic ha sempre 8 turni; in drawing si può scegliere
     rounds: mode === "classic" ? SLOTS : (patch.rounds ?? (current.mode === "drawing" ? current.rounds : DEFAULT_ROUNDS)),

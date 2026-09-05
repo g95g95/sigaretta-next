@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDrawing, serializeDrawing } from "./drawing";
 import { applySettings, generateCode, reduce, settle, sheetFor, toPlayerView } from "./game";
-import { CODE_ALPHABET, DEFAULT_SETTINGS, DRAW_EXTRA_MS, EMPTY, LIMITS, ROUND_MS, SLOTS } from "./prompts";
+import { CODE_ALPHABET, DEFAULT_SETTINGS, DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_ROOM_NAME_LEN, ROUND_MS, SLOTS } from "./prompts";
 import { GameError } from "./types";
 import type { RoomState } from "./types";
 
@@ -497,5 +497,51 @@ describe("settings", () => {
     const s = legacy as unknown as RoomState;
     expect(toPlayerView(s, "p0", T0).settings).toEqual(DEFAULT_SETTINGS);
     expect(reduce(s, { type: "start", playerId: "p0", now: T0 }).roundEndsAt).toBe(T0 + ROUND_MS);
+  });
+});
+
+describe("roomName", () => {
+  it("defaults to empty", () => {
+    expect(lobby(2).settings.roomName).toBe("");
+  });
+
+  it("is trimmed at creation and by the host patch", () => {
+    const s = reduce(null, {
+      type: "create",
+      code: "ABCD",
+      host: player(0),
+      settings: { roomName: "  Cena del venerdi  " },
+      now: T0,
+    });
+    expect(s.settings.roomName).toBe("Cena del venerdi");
+
+    const renamed = reduce(s, { type: "settings", playerId: "p0", patch: { roomName: " Nuovo " }, now: T0 });
+    expect(renamed.settings.roomName).toBe("Nuovo");
+    expect(toPlayerView(renamed, "p0", T0).settings.roomName).toBe("Nuovo");
+  });
+
+  it("rejects a name longer than the limit", () => {
+    const s = lobby(2);
+    expect(
+      code(() => reduce(s, { type: "settings", playerId: "p0", patch: { roomName: "x".repeat(MAX_ROOM_NAME_LEN + 1) }, now: T0 })),
+    ).toBe("INVALID_SETTINGS");
+    expect(
+      reduce(s, { type: "settings", playerId: "p0", patch: { roomName: "x".repeat(MAX_ROOM_NAME_LEN) }, now: T0 })
+        .settings.roomName,
+    ).toBe("x".repeat(MAX_ROOM_NAME_LEN));
+  });
+
+  it("an unchanged name leaves the state untouched, and can be cleared", () => {
+    const named = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { roomName: "Casa" }, now: T0 });
+    expect(reduce(named, { type: "settings", playerId: "p0", patch: { roomName: "Casa" }, now: T0 })).toBe(named);
+    expect(
+      reduce(named, { type: "settings", playerId: "p0", patch: { roomName: "   " }, now: T0 }).settings.roomName,
+    ).toBe("");
+  });
+
+  it("other settings changes keep the name", () => {
+    const named = reduce(lobby(2), { type: "settings", playerId: "p0", patch: { roomName: "Casa" }, now: T0 });
+    const s = reduce(named, { type: "settings", playerId: "p0", patch: { roundMs: 30_000 }, now: T0 });
+    expect(s.settings).toEqual({ ...DEFAULT_SETTINGS, roomName: "Casa", roundMs: 30_000 });
   });
 });

@@ -19,6 +19,7 @@ export interface Player {
 
 /** Impostazioni della stanza: scelte alla creazione, modificabili dall'host in lobby. */
 export interface RoomSettings {
+  roomName: string; // nome della stanza; "" = senza nome (si usa il codice)
   mode: GameMode;
   rounds: number; // turni/slot per foglietto: 8 in classic, 4–8 in drawing
   minPlayers: number; // giocatori minimi per avviare la partita
@@ -134,7 +135,7 @@ export interface PlayerView {
 // Header di autenticazione: `x-player-token: <token>`.
 // Errori: status 4xx/5xx con body { error: GameErrorCode | "BAD_REQUEST" | "INTERNAL", message: string }.
 //
-// POST /api/room                      body {name, mode?, rounds?} → 201 { code, token, playerId }
+// POST /api/room                      body {name, roomName?, mode?, rounds?} → 201 { code, token, playerId }
 // POST /api/room/[code]/join          body {name}        → 200 { code, token, playerId }
 // GET  /api/room/[code]/state         header token       → 200 PlayerView   (aggiorna lastSeen)
 // POST /api/room/[code]/answer        body {text, round} → 200 PlayerView

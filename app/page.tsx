@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import Button from "@/components/Button";
 import { api, errorMessage, getToken, setToken } from "@/lib/client";
-import { DEFAULT_ROUNDS, MAX_NAME_LEN, MAX_ROUNDS, MIN_ROUNDS } from "@/lib/prompts";
+import { DEFAULT_ROUNDS, MAX_NAME_LEN, MAX_ROOM_NAME_LEN, MAX_ROUNDS, MIN_ROUNDS } from "@/lib/prompts";
 import type { GameMode, JoinResponse } from "@/lib/types";
 
 const ROUND_OPTIONS = Array.from({ length: MAX_ROUNDS - MIN_ROUNDS + 1 }, (_, i) => MIN_ROUNDS + i);
@@ -12,6 +12,7 @@ const ROUND_OPTIONS = Array.from({ length: MAX_ROUNDS - MIN_ROUNDS + 1 }, (_, i)
 export default function Home() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [roomName, setRoomName] = useState("");
   const [code, setCode] = useState("");
   const [mode, setMode] = useState<GameMode>("classic");
   const [rounds, setRounds] = useState(DEFAULT_ROUNDS);
@@ -33,7 +34,10 @@ export default function Home() {
     setBusy(kind);
     try {
       const path = kind === "create" ? "/api/room" : `/api/room/${code}/join`;
-      const body = kind === "create" ? { name: name.trim(), mode, rounds } : { name: name.trim() };
+      const body =
+        kind === "create"
+          ? { name: name.trim(), roomName: roomName.trim(), mode, rounds }
+          : { name: name.trim() };
       const res = await api<JoinResponse>(path, { method: "POST", body });
       setToken(res.code, res.token);
       router.push(`/r/${res.code}`);
@@ -63,6 +67,18 @@ export default function Home() {
           autoComplete="nickname"
           placeholder="Come ti chiamano"
           onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor="room-name">Nome della stanza (facoltativo)</label>
+        <input
+          id="room-name"
+          type="text"
+          value={roomName}
+          maxLength={MAX_ROOM_NAME_LEN}
+          placeholder="Es. Cena del venerdì"
+          onChange={(e) => setRoomName(e.target.value)}
         />
       </div>
 
