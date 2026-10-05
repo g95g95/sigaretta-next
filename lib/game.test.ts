@@ -545,3 +545,53 @@ describe("roomName", () => {
     expect(s.settings).toEqual({ ...DEFAULT_SETTINGS, roomName: "Casa", roundMs: 30_000 });
   });
 });
+
+describe("late answer after last round", () => {
+  it("returns ROUND_OVER when the phase is already reveal", () => {
+    let s = started(2);
+    for (let r = 0; r < SLOTS; r++) s = reduce(s, { type: "tick", now: T0 + ROUND_MS * (r + 1) });
+    expect(s.phase).toBe("reveal");
+    expect(code(() => reduce(s, { type: "answer", playerId: "p0", round: SLOTS - 1, text: "late", now: T0 + ROUND_MS * SLOTS }))).toBe("ROUND_OVER");
+  });
+});
+
+describe("leave and kick", () => {
+  it("leave in lobby removes the player", () => {
+    const s = reduce(lobby(3), { type: "leave", playerId: "p2", now: T0 });
+    expect(s.players.map((p) => p.id)).toEqual(["p0", "p1"]);
+    expect(s.hostId).toBe("p0");
+  });
+
+  it("host leave migrates host to the first remaining player", () => {
+    const s = reduce(lobby(3), { type: "leave", playerId: "p0", now: T0 });
+    expect(s.hostId).toBe("p1");
+    expect(reduce(lobby(1), { type: "leave", playerId: "p0", now: T0 }).players).toEqual([]);
+  });
+
+  it("leave outside lobby -> NOT_IN_LOBBY", () => {
+    expect(code(() => reduce(started(2), { type: "leave", playerId: "p1", now: T0 }))).toBe("NOT_IN_LOBBY");
+  });
+
+  it("kick by host removes the target; frees name and seat", () => {
+    const base = lobby(2);
+    const full = reduce(base, { type: "settings", playerId: "p0", patch: { maxPlayers: 2 }, now: T0 });
+    expect(code(() => reduce(full, { type: "join", player: { id: "x", token: "tx", name: "Other" }, now: T0 }))).toBe("ROOM_FULL");
+    const s = reduce(full, { type: "kick", playerId: "p0", targetId: "p1", now: T0 });
+    expect(s.players.map((p) => p.id)).toEqual(["p0"]);
+    const j = reduce(s, { type: "join", player: { id: "x", token: "tx", name: "Player1" }, now: T0 });
+    expect(j.players).toHaveLength(2);
+  });
+
+  it("kick by non-host -> NOT_HOST", () => {
+    expect(code(() => reduce(lobby(3), { type: "kick", playerId: "p1", targetId: "p2", now: T0 }))).toBe("NOT_HOST");
+  });
+
+  it("kick self or unknown -> NOT_A_PLAYER", () => {
+    expect(code(() => reduce(lobby(2), { type: "kick", playerId: "p0", targetId: "p0", now: T0 }))).toBe("NOT_A_PLAYER");
+    expect(code(() => reduce(lobby(2), { type: "kick", playerId: "p0", targetId: "zz", now: T0 }))).toBe("NOT_A_PLAYER");
+  });
+
+  it("kick outside lobby -> NOT_IN_LOBBY", () => {
+    expect(code(() => reduce(started(2), { type: "kick", playerId: "p0", targetId: "p1", now: T0 }))).toBe("NOT_IN_LOBBY");
+  });
+});

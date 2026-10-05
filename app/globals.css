@@ -296,6 +296,12 @@ input[type="range"] {
   background: rgba(31, 27, 22, 0.06);
 }
 
+.btn-sm {
+  margin-left: auto;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.85rem;
+}
+
 .btn:active:not(:disabled) {
   transform: translateY(1px);
   box-shadow: none;

@@ -70,7 +70,9 @@ export type Action =
   | { type: "settings"; playerId: string; patch: SettingsPatch; now: number } // solo host, in lobby
   | { type: "answer"; playerId: string; round: number; text: string; now: number } // round = quello a cui risponde
   | { type: "advance"; playerId: string; now: number } // solo host, in reveal: prossimo passaggio/foglietto / fine
-  | { type: "restart"; playerId: string; now: number }; // solo host, da reveal/ended → lobby
+  | { type: "restart"; playerId: string; now: number } // solo host, da reveal/ended → lobby
+  | { type: "leave"; playerId: string; now: number } // il giocatore esce, solo in lobby
+  | { type: "kick"; playerId: string; targetId: string; now: number }; // solo host, in lobby, mai se stesso
 
 export type GameErrorCode =
   | "ROOM_NOT_FOUND"
@@ -143,6 +145,9 @@ export interface PlayerView {
 // POST /api/room/[code]/start                            → 200 PlayerView
 // POST /api/room/[code]/settings      body SettingsPatch → 200 PlayerView   (solo host, in lobby)
 // POST /api/room/[code]/restart                          → 200 PlayerView
+// POST /api/room/[code]/leave                            → 200 { ok: true }  (solo in lobby)
+// POST /api/room/[code]/kick          body { playerId }  → 200 PlayerView    (solo host, in lobby)
+// Dopo leave/kick il GET state del giocatore rimosso risponde NOT_A_PLAYER.
 
 export interface JoinResponse {
   code: string;

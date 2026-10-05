@@ -117,3 +117,22 @@ export async function mutateAsPlayer(
     { token },
   );
 }
+
+/** Il giocatore esce dalla stanza: dopo la scrittura non ha più una vista da restituire. */
+export async function leaveAsPlayer(code: string, req: Request): Promise<void> {
+  const token = tokenFrom(req);
+  if (!token) throw new GameError("NOT_A_PLAYER");
+  const store = getStore();
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const state = await store.get(code);
+    if (!state) throw new GameError("ROOM_NOT_FOUND");
+    const me = state.players.find((p) => p.token === token);
+    if (!me) throw new GameError("NOT_A_PLAYER");
+
+    const next = reduce(state, { type: "leave", playerId: me.id, now: Date.now() });
+    if (await store.cas(code, state.version, { ...next, version: state.version + 1 })) return;
+  }
+
+  throw new GameError("CONFLICT");
+}

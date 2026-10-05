@@ -1,6 +1,6 @@
 /** Helper client-side: token in localStorage + wrapper fetch sulle API. */
 
-import type { ApiError } from "@/lib/types";
+import type { ApiError, PlayerView } from "@/lib/types";
 
 const key = (code: string) => `sigaretta:${code}`;
 
@@ -71,6 +71,12 @@ export async function api<T>(path: string, opts: ApiOptions = {}): Promise<T> {
 
   return (await res.json()) as T;
 }
+
+export const leaveRoom = (code: string, token: string) =>
+  api<{ ok: true }>(`/api/room/${code}/leave`, { method: "POST", token });
+
+export const kickPlayer = (code: string, token: string, playerId: string) =>
+  api<PlayerView>(`/api/room/${code}/kick`, { method: "POST", body: { playerId }, token });
 
 const MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "Stanza non trovata",

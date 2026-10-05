@@ -72,3 +72,11 @@ Installare La Sigaretta sulla schermata Home del telefono, con icona dedicata
   Riprova riapre la home. Questo verifica il worker realmente nel browser.
 - Da verificare dopo pubblicazione: installazione su telefoni Android/iPhone reali.
 - Nessun push o deploy eseguito.
+
+## Correzioni audit + esci/rimuovi (2026-10-05)
+
+1. Bug: risposta in ritardo all'ultimo round ora dà `ROUND_OVER` (non `WRONG_PHASE`) in reveal/ended.
+2. Azioni `leave` e `kick` nel reducer (solo lobby, migrazione host).
+3. Route `POST /leave` e `POST /kick`, contratto HTTP documentato in `lib/types.ts`.
+4. Test per leave/kick e per la risposta tardiva all'ultimo round.
+5. Client: esci/rimuovi in lobby e ritorno alla home per il giocatore rimosso.

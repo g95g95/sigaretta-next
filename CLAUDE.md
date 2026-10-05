@@ -33,6 +33,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - Il tipo di uno slot deriva sempre da `(mode, slot)`, mai dal contenuto: i disegni sono stringhe serializzate nello stesso `sheets[i][slot]`, validate dal reducer con `parseDrawing`.
 - I turni di disegno durano `roundMs + DRAW_EXTRA_MS`; il client li autoinvia a 3s dalla fine.
 - L'azione `answer` porta il `round` a cui si riferisce: se non coincide → `ROUND_OVER` (una risposta in ritardo non finisce mai nel round successivo).
+- `leave` (il giocatore esce) e `kick` (l'host rimuove un altro giocatore) valgono solo in lobby; se esce l'host, il ruolo passa al primo giocatore rimasto. Il giocatore rimosso riceve `NOT_A_PLAYER` al successivo GET state.
 - Reveal in drawing: `revealStep` avanza un passaggio alla volta; il client riceve solo i passaggi già svelati.
 
 ## Convenzioni

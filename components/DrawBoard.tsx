@@ -23,6 +23,8 @@ interface Props {
   value: Drawing;
   onChange: (next: Drawing) => void;
   disabled?: boolean;
+  /** il genitore la chiama per avere il disegno comprensivo del tratto ancora in corso */
+  flushRef?: React.MutableRefObject<(() => Drawing) | null>;
 }
 
 function paintStroke(ctx: CanvasRenderingContext2D, s: Stroke, scale: number) {
@@ -46,10 +48,11 @@ function paintStroke(ctx: CanvasRenderingContext2D, s: Stroke, scale: number) {
 }
 
 /** Board "tipo Paint": tratti a mano libera con colori e spessori, gomma, annulla, pulisci. */
-export default function DrawBoard({ value, onChange, disabled = false }: Props) {
+export default function DrawBoard({ value, onChange, disabled = false, flushRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const scaleRef = useRef(1); // pixel canvas per unità logica
   const current = useRef<Stroke | null>(null); // tratto in corso (non ancora in `value`)
+  const activePointer = useRef<number | null>(null); // solo il dito/penna che ha iniziato il tratto
   const [color, setColor] = useState(0);
   const [width, setWidth] = useState(1);
   const [full, setFull] = useState(false);
@@ -96,6 +99,7 @@ export default function DrawBoard({ value, onChange, disabled = false }: Props) 
 
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (disabled || current.current) return;
+    activePointer.current = e.pointerId;
     e.currentTarget.setPointerCapture(e.pointerId);
     const [x, y] = toLogical(e);
     current.current = { c: color, w: width, p: [x, y] };
@@ -104,7 +108,7 @@ export default function DrawBoard({ value, onChange, disabled = false }: Props) 
 
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const s = current.current;
-    if (!s) return;
+    if (!s || e.pointerId !== activePointer.current) return;
     const [x, y] = toLogical(e);
     const n = s.p.length;
     if (Math.abs(x - s.p[n - 2]) < MIN_STEP && Math.abs(y - s.p[n - 1]) < MIN_STEP) return;
@@ -124,19 +128,27 @@ export default function DrawBoard({ value, onChange, disabled = false }: Props) 
     s.p.push(x, y);
   };
 
-  const up = () => {
+  const commit = (): Drawing => {
     const s = current.current;
-    if (!s) return;
+    if (!s) return value;
     current.current = null;
+    activePointer.current = null;
     const next = [...value, s];
     // Il disegno viaggia in una singola chiave Redis: oltre il budget il tratto viene scartato.
     if (next.length > MAX_STROKES || serializeDrawing(next).length > MAX_DRAWING_LEN) {
       setFull(true);
       redraw();
-      return;
+      return value;
     }
     setFull(false);
     onChange(next);
+    return next;
+  };
+  if (flushRef) flushRef.current = commit;
+
+  const up = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerId !== activePointer.current) return;
+    commit();
   };
 
   return (

@@ -96,6 +96,12 @@ function requireHost(state: RoomState, playerId: string): void {
   if (state.hostId !== playerId) throw new GameError("NOT_HOST");
 }
 
+function removePlayer(state: RoomState, id: string): RoomState {
+  const players = state.players.filter((p) => p.id !== id);
+  const hostId = state.hostId === id && players.length > 0 ? players[0].id : state.hostId;
+  return { ...state, players, hostId };
+}
+
 function closeRound(state: RoomState, now: number): RoomState {
   const settings = settingsOf(state);
   const next = state.round + 1;
@@ -181,6 +187,20 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
       };
     }
 
+    case "leave": {
+      seatOf(s, action.playerId);
+      if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
+      return removePlayer(s, action.playerId);
+    }
+
+    case "kick": {
+      requireHost(s, action.playerId);
+      if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
+      if (action.targetId === s.hostId) throw new GameError("NOT_A_PLAYER");
+      seatOf(s, action.targetId);
+      return removePlayer(s, action.targetId);
+    }
+
     case "start": {
       requireHost(s, action.playerId);
       if (s.phase !== "lobby") throw new GameError("NOT_IN_LOBBY");
@@ -210,8 +230,10 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
     }
 
     case "answer": {
-      if (s.phase !== "round") throw new GameError("WRONG_PHASE");
+      if (s.phase === "lobby") throw new GameError("WRONG_PHASE");
       const seat = seatOf(s, action.playerId);
+      // Dopo l'ultimo round la fase è già reveal/ended: ogni risposta è in ritardo.
+      if (s.phase !== "round") throw new GameError("ROUND_OVER");
       // Risposta arrivata dopo la chiusura del round: non deve finire nel round successivo.
       if (action.round !== s.round) throw new GameError("ROUND_OVER");
       const text = cleanAnswer(s, action.text);

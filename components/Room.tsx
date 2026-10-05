@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "@/components/Button";
 import DrawBoard from "@/components/DrawBoard";
@@ -8,7 +9,7 @@ import DrawingView from "@/components/DrawingView";
 import PaperCard from "@/components/PaperCard";
 import PlayerList from "@/components/PlayerList";
 import Timer, { useCountdown } from "@/components/Timer";
-import { ApiClientError, api, clearToken, errorMessage, getToken, setToken } from "@/lib/client";
+import { ApiClientError, api, clearToken, errorMessage, getToken, kickPlayer, leaveRoom, setToken } from "@/lib/client";
 import { serializeDrawing } from "@/lib/drawing";
 import type { Drawing } from "@/lib/drawing";
 import { DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_NAME_LEN, MAX_ROOM_NAME_LEN, PROMPTS, SLOTS, composeSentence, slotKind } from "@/lib/prompts";
@@ -26,6 +27,15 @@ export default function Room({ code }: { code: string }) {
   const [offline, setOffline] = useState(false);
   const phaseRef = useRef<PlayerView["phase"] | null>(null);
   phaseRef.current = view?.phase ?? null;
+  const router = useRouter();
+  const versionRef = useRef(-1);
+
+  // Mai tornare a una vista più vecchia di quella già mostrata (un GET lento può arrivare dopo una POST).
+  const adopt = useCallback((next: PlayerView) => {
+    if (next.version < versionRef.current) return;
+    versionRef.current = next.version;
+    setView(next);
+  }, []);
 
   useEffect(() => {
     setTok(getToken(code));
@@ -42,6 +52,7 @@ export default function Room({ code }: { code: string }) {
     clearToken(code);
     setTok(null);
     setView(null);
+    versionRef.current = -1;
   }, [code]);
 
   // Polling dello stato: sospeso quando il tab è nascosto, ripreso al ritorno.
@@ -51,26 +62,31 @@ export default function Room({ code }: { code: string }) {
     let timer: ReturnType<typeof setInterval> | null = null;
     let lastPoll = 0;
     const controllers = new Set<AbortController>();
+    let inFlight = false;
 
     const poll = async () => {
+      if (inFlight) return;
+      inFlight = true;
       const ac = new AbortController();
       controllers.add(ac);
       lastPoll = Date.now();
       try {
         const next = await api<PlayerView>(`/api/room/${code}/state`, { token, signal: ac.signal });
         if (stopped) return;
-        setView(next);
+        adopt(next);
         setOffline(false);
       } catch (err) {
         if (stopped || ac.signal.aborted) return;
         if (err instanceof ApiClientError && err.code === "NOT_A_PLAYER") {
           dropToken();
+          setFatal("Non fai più parte di questa stanza");
         } else if (err instanceof ApiClientError && err.code === "ROOM_NOT_FOUND") {
           setFatal("Stanza scaduta o inesistente");
         } else {
           setOffline(true); // rete instabile: teniamo l'ultima vista
         }
       } finally {
+        inFlight = false;
         controllers.delete(ac);
       }
     };
@@ -98,7 +114,7 @@ export default function Room({ code }: { code: string }) {
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [code, token, dropToken]);
+  }, [code, token, dropToken, adopt]);
 
   if (!ready) return null;
 
@@ -132,7 +148,15 @@ export default function Room({ code }: { code: string }) {
           Connessione instabile…
         </p>
       )}
-      <Phase view={view} token={token} onView={setView} />
+      <Phase
+        view={view}
+        token={token}
+        onView={adopt}
+        onLeft={() => {
+          router.push("/");
+          dropToken();
+        }}
+      />
     </main>
   );
 }
@@ -189,6 +213,7 @@ interface PhaseProps {
   view: PlayerView;
   token: string;
   onView: (v: PlayerView) => void;
+  onLeft: () => void;
 }
 
 function Phase(props: PhaseProps) {
@@ -237,6 +262,26 @@ function Lobby(props: PhaseProps) {
   const { view } = props;
   const { busy, error, run } = useAction(props);
   const [copied, setCopied] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  const leave = async () => {
+    try {
+      await leaveRoom(view.code, props.token);
+      props.onLeft();
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "NOT_A_PLAYER") props.onLeft();
+      else setLeaveError(errorMessage(err));
+    }
+  };
+
+  const kick = async (p: PlayerPublic) => {
+    if (!confirm(`Rimuovere ${p.name} dalla stanza?`)) return;
+    try {
+      props.onView(await kickPlayer(view.code, props.token, p.id));
+    } catch (err) {
+      setLeaveError(errorMessage(err));
+    }
+  };
 
   const copy = async () => {
     try {
@@ -271,7 +316,7 @@ function Lobby(props: PhaseProps) {
         Giocatori ({view.players.length}/{view.settings.maxPlayers})
       </h2>
       <PaperCard>
-        <PlayerList players={view.players} meId={view.me.id} />
+        <PlayerList players={view.players} meId={view.me.id} onKick={view.me.isHost ? kick : undefined} />
       </PaperCard>
 
       <div className="actions">
@@ -287,8 +332,13 @@ function Lobby(props: PhaseProps) {
       </div>
       {view.me.isHost && few && <p className="muted">Servono almeno {min} giocatori.</p>}
       <p className="error" role="alert" aria-live="polite">
-        {error}
+        {error ?? leaveError}
       </p>
+      <div className="actions">
+        <Button variant="ghost" block onClick={leave}>
+          Esci dalla stanza
+        </Button>
+      </div>
 
       {view.me.isHost ? (
         <Settings {...props} />
@@ -515,6 +565,7 @@ function Round(props: PhaseProps) {
   const [text, setText] = useState("");
   const [drawing, setDrawing] = useState<Drawing>([]);
   const autoSent = useRef(false);
+  const flushRef = useRef<(() => Drawing) | null>(null);
   const left = useCountdown(view.roundEndsAt, view.serverNow);
   const isDrawing = view.kind === "drawing";
   const maxLen = view.settings.maxAnswerLen;
@@ -526,10 +577,10 @@ function Round(props: PhaseProps) {
     autoSent.current = false;
   }, [view.round, view.game]);
 
-  const send = () => {
+  const send = (final: Drawing = drawing) => {
     if (isDrawing) {
-      if (drawing.length === 0) return;
-      void run("/answer", { text: serializeDrawing(drawing), round: view.round }, OK_LATE);
+      if (final.length === 0) return;
+      void run("/answer", { text: serializeDrawing(final), round: view.round }, OK_LATE);
     } else {
       if (!text.trim()) return;
       void run("/answer", { text: text.trim(), round: view.round }, OK_LATE);
@@ -539,9 +590,11 @@ function Round(props: PhaseProps) {
   // Disegno: a pochi secondi dalla fine si invia quello che c'è.
   useEffect(() => {
     if (!isDrawing || view.me.answered || busy || autoSent.current) return;
-    if (left > 0 && left <= AUTOSEND_S && drawing.length > 0) {
+    if (left > 0 && left <= AUTOSEND_S) {
+      const final = flushRef.current?.() ?? drawing; // include il tratto ancora in corso
+      if (final.length === 0) return;
       autoSent.current = true;
-      send();
+      send(final);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [left]);
@@ -578,7 +631,7 @@ function Round(props: PhaseProps) {
       {view.mode === "drawing" && view.round > 0 && <Previous view={view} />}
 
       {isDrawing ? (
-        <DrawBoard value={drawing} onChange={setDrawing} disabled={busy} />
+        <DrawBoard value={drawing} onChange={setDrawing} disabled={busy} flushRef={flushRef} />
       ) : (
         <div className="field">
           <label className="sr-only" htmlFor="answer">
@@ -599,7 +652,7 @@ function Round(props: PhaseProps) {
       )}
 
       <div className="actions">
-        <Button block loading={busy} disabled={isDrawing ? drawing.length === 0 : !text.trim()} onClick={send}>
+        <Button block loading={busy} disabled={isDrawing ? drawing.length === 0 : !text.trim()} onClick={() => send()}>
           Invia
         </Button>
       </div>

@@ -35,6 +35,7 @@ Senza le env Upstash configurate, l'app usa uno store in memoria valido solo in 
 ## Come funziona
 
 - In lobby l'host può regolare le impostazioni della stanza: nome della stanza (facoltativo, max 30 caratteri), modalità e turni, giocatori minimi e massimi (2–10), tempo per round (15–300 s) e caratteri per risposta (20–300). Valgono per la stanza, anche nelle partite successive.
+- In lobby ogni giocatore può uscire dalla stanza e l'host può rimuovere un giocatore; se esce l'host, il ruolo passa al primo rimasto. A partita iniziata non è possibile.
 - A fine partita ognuno scorre i foglietti per conto suo e può esportarli in JSON (bottone "Esporta in JSON").
 
 

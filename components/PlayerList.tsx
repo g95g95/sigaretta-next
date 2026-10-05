@@ -5,9 +5,11 @@ interface Props {
   /** in "round" mostra la spunta di chi ha già risposto */
   showAnswered?: boolean;
   meId?: string;
+  /** lobby, solo host: mostra "Rimuovi" accanto agli altri giocatori */
+  onKick?: (p: PlayerPublic) => void;
 }
 
-export default function PlayerList({ players, showAnswered = false, meId }: Props) {
+export default function PlayerList({ players, showAnswered = false, meId, onKick }: Props) {
   return (
     <ul className="players">
       {players.map((p) => (
@@ -26,6 +28,11 @@ export default function PlayerList({ players, showAnswered = false, meId }: Prop
             <span className="check" title="Ha risposto">
               ✓<span className="sr-only"> ha risposto</span>
             </span>
+          )}
+          {onKick && p.id !== meId && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onKick(p)}>
+              Rimuovi
+            </button>
           )}
         </li>
       ))}
