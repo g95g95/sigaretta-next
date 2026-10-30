@@ -765,6 +765,156 @@ input[type="range"] {
   margin-bottom: 0;
 }
 
+/* ---------- chat di stanza ---------- */
+
+/* spazio in fondo alla pagina perché la chat chiusa non copra i bottoni */
+.screen-room {
+  padding-bottom: 4rem;
+}
+
+.chat {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(1rem + env(safe-area-inset-bottom));
+  z-index: 50;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: #1c1e21;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.chat-open {
+  width: min(20rem, calc(100vw - 2rem));
+}
+
+.chat-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: var(--tap);
+  padding: 0.5rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+}
+
+.chat-open .chat-head {
+  border-bottom: 1px solid #e4e6eb;
+}
+
+.chat-head:focus-visible,
+.chat-send:focus-visible {
+  outline: 3px solid #1967d2;
+  outline-offset: -3px;
+}
+
+.chat-badge {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  font-size: 0.75rem;
+  line-height: 1.3rem;
+  text-align: center;
+  color: #fff;
+  background: #e41e3f;
+  border-radius: 999px;
+}
+
+.chat-caret {
+  margin-left: auto;
+  color: #65676b;
+}
+
+.chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0.6rem;
+  height: min(18rem, 45dvh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.chat-empty {
+  margin: auto;
+  color: #65676b;
+}
+
+.chat-msg {
+  align-self: flex-start;
+  max-width: 85%;
+  padding: 0.35rem 0.65rem;
+  background: #f0f2f5;
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+}
+
+.chat-mine {
+  align-self: flex-end;
+  background: #e7f0fe;
+}
+
+.chat-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.chat-form {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-top: 1px solid #e4e6eb;
+}
+
+/* 16px: sotto questa misura iOS zooma la pagina al focus */
+.chat input[type="text"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.4rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 16px;
+  color: inherit;
+  background: #f0f2f5;
+  border: 0;
+  border-radius: 999px;
+}
+
+.chat input[type="text"]:focus-visible {
+  outline: 2px solid #1967d2;
+  outline-offset: 0;
+  background: #f0f2f5;
+}
+
+.chat-send {
+  padding: 0 0.8rem;
+  font: inherit;
+  font-weight: 600;
+  color: #1967d2;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.chat-send:disabled {
+  color: #bcc0c4;
+  cursor: default;
+}
+
+.chat-error {
+  margin: 0 0.7rem 0.5rem;
+  font-size: 0.8rem;
+  color: #c5221f;
+}
+
 /* ---------- animazioni ---------- */
 
 @keyframes fade-in {

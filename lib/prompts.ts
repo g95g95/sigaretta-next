@@ -44,6 +44,8 @@ export const LIMITS = {
 
 export const MAX_NAME_LEN = 20;
 export const MAX_ROOM_NAME_LEN = 30;
+export const MAX_CHAT_LEN = 200;
+export const CHAT_HISTORY = 50; // messaggi tenuti nella stanza: i più vecchi si scartano
 export const CONNECTED_MS = 10_000; // lastSeen entro 10s = connesso
 export const HOST_TIMEOUT_MS = 30_000; // host silente da >30s = migrazione
 export const ROOM_TTL_S = 24 * 60 * 60;

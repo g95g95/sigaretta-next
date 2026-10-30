@@ -37,6 +37,7 @@ Senza le env Upstash configurate, l'app usa uno store in memoria valido solo in 
 - In lobby l'host può regolare le impostazioni della stanza: nome della stanza (facoltativo, max 30 caratteri), modalità e turni, giocatori minimi e massimi (2–10), tempo per round (15–300 s) e caratteri per risposta (20–300). Valgono per la stanza, anche nelle partite successive.
 - In lobby ogni giocatore può uscire dalla stanza e l'host può rimuovere un giocatore; se esce l'host, il ruolo passa al primo rimasto. A partita iniziata non è possibile.
 - A fine partita ognuno scorre i foglietti per conto suo e può esportarli in JSON (bottone "Esporta in JSON").
+- In ogni fase c'è una minichat di stanza, collassabile in basso a destra: solo testo (max 200 caratteri), con un colore per giocatore. Restano gli ultimi 50 messaggi, che scadono con la stanza.
 
 
 - Lo stato di ogni stanza è una singola chiave Redis con TTL di 24 ore. I disegni sono vettoriali (tratti compatti, max 20 KB l'uno) e vivono nella stessa chiave.

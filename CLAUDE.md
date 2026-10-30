@@ -24,7 +24,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - `app/api/room/**` — route handler HTTP.
 - `app/page.tsx` — home.
 - `app/r/[code]` — pagina stanza.
-- `components/` — UI (`DrawBoard` = lavagna canvas, `DrawingView` = rendering SVG di un disegno).
+- `components/` — UI (`DrawBoard` = lavagna canvas, `DrawingView` = rendering SVG di un disegno, `Chat` = minichat di stanza).
 - `lib/client.ts` — helper fetch lato client + gestione token.
 
 ## Modalità di gioco
@@ -35,6 +35,12 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - L'azione `answer` porta il `round` a cui si riferisce: se non coincide → `ROUND_OVER` (una risposta in ritardo non finisce mai nel round successivo).
 - `leave` (il giocatore esce) e `kick` (l'host rimuove un altro giocatore) valgono solo in lobby; se esce l'host, il ruolo passa al primo giocatore rimasto. Il giocatore rimosso riceve `NOT_A_PLAYER` al successivo GET state.
 - Reveal in drawing: `revealStep` avanza un passaggio alla volta; il client riceve solo i passaggi già svelati.
+
+## Chat di stanza
+
+- Azione `chat` in ogni fase: testo trim, 1–`MAX_CHAT_LEN` caratteri, altrimenti `INVALID_MESSAGE`. `RoomState.chat` tiene gli ultimi `CHAT_HISTORY` messaggi con `id` progressivo; il messaggio salva il nome dell'autore all'invio.
+- `RoomState.chat` è opzionale (stanze salvate prima): leggerlo sempre come `state.chat ?? []`. La chat sopravvive al restart e scade con la stanza.
+- `components/Chat.tsx` è montato fuori da `<main>`: l'animazione di `.screen` lascia un `transform` che romperebbe `position: fixed`. I non letti contano solo i messaggi arrivati dopo l'apertura della pagina; lo stato aperto/chiuso non va in localStorage.
 
 ## Convenzioni
 
@@ -47,7 +53,7 @@ Next.js 15 (App Router), React 19, TypeScript strict, `@upstash/redis` (REST), v
 - Il countdown fissa l'offset `serverNow − Date.now()` una volta per view: ricalcolarlo a ogni polling farebbe saltellare il timer.
 - Le impostazioni di stanza (nome stanza, modalità, turni, min/max giocatori, tempo per round, caratteri per risposta) vivono in `RoomState.settings`: leggerle sempre con `settingsOf(state)`, che completa con i default le stanze salvate prima (anche per singolo campo).
 - Nessun uso di localStorage oltre al token della stanza.
-- Nessuna feature extra fuori scope (account, chat, salvataggio partite).
+- Nessuna feature extra fuori scope (account, salvataggio partite). La chat è solo testo: niente reazioni, allegati o messaggi privati.
 
 Prima di dichiarare un task finito: `npm test` e `npm run build` devono essere verdi.
 

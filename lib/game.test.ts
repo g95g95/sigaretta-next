@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseDrawing, serializeDrawing } from "./drawing";
 import { applySettings, generateCode, reduce, settle, sheetFor, toPlayerView } from "./game";
-import { CODE_ALPHABET, DEFAULT_SETTINGS, DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_ROOM_NAME_LEN, ROUND_MS, SLOTS } from "./prompts";
+import { CHAT_HISTORY, CODE_ALPHABET, DEFAULT_SETTINGS, DRAW_EXTRA_MS, EMPTY, LIMITS, MAX_CHAT_LEN, MAX_ROOM_NAME_LEN, ROUND_MS, SLOTS } from "./prompts";
 import { GameError } from "./types";
 import type { RoomState } from "./types";
 
@@ -593,5 +593,34 @@ describe("leave and kick", () => {
 
   it("kick outside lobby -> NOT_IN_LOBBY", () => {
     expect(code(() => reduce(started(2), { type: "kick", playerId: "p0", targetId: "p1", now: T0 }))).toBe("NOT_IN_LOBBY");
+  });
+});
+
+describe("chat", () => {
+  const say = (s: RoomState, playerId: string, text: string) => reduce(s, { type: "chat", playerId, text, now: T0 });
+
+  it("trims the text, rejects empty or too long messages and unknown players", () => {
+    const s = say(lobby(2), "p1", "  ciao  ");
+    expect(toPlayerView(s, "p0", T0).chat).toEqual([{ id: 1, playerId: "p1", name: "Player1", text: "ciao", at: T0 }]);
+    expect(code(() => say(s, "p1", "   "))).toBe("INVALID_MESSAGE");
+    expect(code(() => say(s, "p1", "x".repeat(MAX_CHAT_LEN + 1)))).toBe("INVALID_MESSAGE");
+    expect(say(s, "p1", "x".repeat(MAX_CHAT_LEN)).chat).toHaveLength(2);
+    expect(code(() => say(s, "zz", "ciao"))).toBe("NOT_A_PLAYER");
+  });
+
+  it("keeps only the last CHAT_HISTORY messages with increasing ids, also during a round", () => {
+    let s = started(2);
+    for (let i = 0; i < CHAT_HISTORY + 5; i++) s = say(s, `p${i % 2}`, `m${i}`);
+    const chat = toPlayerView(s, "p0", T0).chat;
+    expect(chat).toHaveLength(CHAT_HISTORY);
+    expect(chat[0].text).toBe("m5");
+    expect(say(s, "p0", "next").chat?.at(-1)?.id).toBe(CHAT_HISTORY + 6);
+  });
+
+  it("works on rooms saved before the chat existed", () => {
+    const { chat: _omit, ...legacy } = lobby(2);
+    const s = legacy as RoomState;
+    expect(toPlayerView(s, "p0", T0).chat).toEqual([]);
+    expect(say(s, "p0", "ciao").chat?.map((m) => m.id)).toEqual([1]);
   });
 });

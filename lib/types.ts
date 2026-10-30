@@ -31,6 +31,15 @@ export interface RoomSettings {
 /** Aggiornamento parziale: i campi omessi restano invariati. */
 export type SettingsPatch = Partial<RoomSettings>;
 
+/** Messaggio della chat di stanza: solo testo, vive e scade con la stanza. */
+export interface ChatMessage {
+  id: number; // progressivo nella stanza
+  playerId: string;
+  name: string; // nome al momento dell'invio: resta anche se il giocatore esce
+  text: string;
+  at: number; // ms epoch
+}
+
 export interface RoomState {
   code: string;
   version: number; // incrementato dallo store a ogni write (lock ottimistico)
@@ -50,6 +59,7 @@ export interface RoomState {
   sheets: (string | null)[][];
   revealIndex: number; // foglietto attualmente rivelato (phase "reveal")
   revealStep: number; // passaggi svelati del foglietto corrente (solo drawing: 0–rounds-1)
+  chat?: ChatMessage[]; // ultimi CHAT_HISTORY messaggi; assente nelle stanze salvate prima
 }
 
 // ---- Azioni del reducer -------------------------------------------------
@@ -72,7 +82,8 @@ export type Action =
   | { type: "advance"; playerId: string; now: number } // solo host, in reveal: prossimo passaggio/foglietto / fine
   | { type: "restart"; playerId: string; now: number } // solo host, da reveal/ended → lobby
   | { type: "leave"; playerId: string; now: number } // il giocatore esce, solo in lobby
-  | { type: "kick"; playerId: string; targetId: string; now: number }; // solo host, in lobby, mai se stesso
+  | { type: "kick"; playerId: string; targetId: string; now: number } // solo host, in lobby, mai se stesso
+  | { type: "chat"; playerId: string; text: string; now: number }; // qualsiasi fase
 
 export type GameErrorCode =
   | "ROOM_NOT_FOUND"
@@ -85,6 +96,7 @@ export type GameErrorCode =
   | "INVALID_NAME"
   | "INVALID_ANSWER"
   | "INVALID_SETTINGS"
+  | "INVALID_MESSAGE"
   | "ALREADY_ANSWERED"
   | "ROUND_OVER"
   | "WRONG_PHASE"
@@ -131,6 +143,7 @@ export interface PlayerView {
    * passaggi svelati (0..step). In ended: tutti, completi. Altrimenti null.
    */
   reveal: { index: number; step: number; total: number; sheets: string[][] } | null;
+  chat: ChatMessage[];
 }
 
 // ---- Contratto HTTP -------------------------------------------------------
@@ -147,6 +160,7 @@ export interface PlayerView {
 // POST /api/room/[code]/restart                          → 200 PlayerView
 // POST /api/room/[code]/leave                            → 200 { ok: true }  (solo in lobby)
 // POST /api/room/[code]/kick          body { playerId }  → 200 PlayerView    (solo host, in lobby)
+// POST /api/room/[code]/chat          body { text }      → 200 PlayerView    (qualsiasi fase)
 // Dopo leave/kick il GET state del giocatore rimosso risponde NOT_A_PLAYER.
 
 export interface JoinResponse {

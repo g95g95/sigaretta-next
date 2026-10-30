@@ -78,6 +78,9 @@ export const leaveRoom = (code: string, token: string) =>
 export const kickPlayer = (code: string, token: string, playerId: string) =>
   api<PlayerView>(`/api/room/${code}/kick`, { method: "POST", body: { playerId }, token });
 
+export const sendChat = (code: string, token: string, text: string) =>
+  api<PlayerView>(`/api/room/${code}/chat`, { method: "POST", body: { text }, token });
+
 const MESSAGES: Record<string, string> = {
   ROOM_NOT_FOUND: "Stanza non trovata",
   ROOM_FULL: "Stanza piena",
@@ -89,6 +92,7 @@ const MESSAGES: Record<string, string> = {
   INVALID_NAME: "Nome non valido",
   INVALID_ANSWER: "Risposta non valida",
   INVALID_SETTINGS: "Impostazioni non valide",
+  INVALID_MESSAGE: "Messaggio non valido",
   ROUND_OVER: "Tempo scaduto per questo turno",
   WRONG_PHASE: "Azione non disponibile ora",
   CONFLICT: "Riprova tra un istante",

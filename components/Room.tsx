@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "@/components/Button";
+import Chat from "@/components/Chat";
 import DrawBoard from "@/components/DrawBoard";
 import DrawingView from "@/components/DrawingView";
 import PaperCard from "@/components/PaperCard";
@@ -141,23 +142,27 @@ export default function Room({ code }: { code: string }) {
     );
   }
 
+  // La chat sta fuori da <main>: l'animazione di .screen lascia un transform che romperebbe position: fixed.
   return (
-    <main className="screen">
-      {offline && (
-        <p className="banner" role="status">
-          Connessione instabile…
-        </p>
-      )}
-      <Phase
-        view={view}
-        token={token}
-        onView={adopt}
-        onLeft={() => {
-          router.push("/");
-          dropToken();
-        }}
-      />
-    </main>
+    <>
+      <main className="screen screen-room">
+        {offline && (
+          <p className="banner" role="status">
+            Connessione instabile…
+          </p>
+        )}
+        <Phase
+          view={view}
+          token={token}
+          onView={adopt}
+          onLeft={() => {
+            router.push("/");
+            dropToken();
+          }}
+        />
+      </main>
+      <Chat view={view} token={token} onView={adopt} />
+    </>
   );
 }
 

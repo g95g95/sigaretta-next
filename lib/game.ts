@@ -1,5 +1,6 @@
 import { parseDrawing } from "./drawing";
 import {
+  CHAT_HISTORY,
   CODE_ALPHABET,
   CONNECTED_MS,
   DEFAULT_ROUNDS,
@@ -7,6 +8,7 @@ import {
   EMPTY,
   HOST_TIMEOUT_MS,
   LIMITS,
+  MAX_CHAT_LEN,
   MAX_NAME_LEN,
   MAX_ROOM_NAME_LEN,
   SLOTS,
@@ -140,6 +142,7 @@ function createRoom(action: Extract<Action, { type: "create" }>): RoomState {
     sheets: [],
     revealIndex: 0,
     revealStep: 0,
+    chat: [],
   };
 }
 
@@ -260,6 +263,16 @@ export function reduce(state: RoomState | null, action: Action): RoomState {
       return { ...s, revealIndex: s.revealIndex + 1, revealStep: 0 };
     }
 
+    case "chat": {
+      const seat = seatOf(s, action.playerId);
+      const text = action.text.trim();
+      if (text.length < 1 || text.length > MAX_CHAT_LEN) throw new GameError("INVALID_MESSAGE");
+      const chat = s.chat ?? [];
+      const id = (chat.at(-1)?.id ?? 0) + 1;
+      const msg = { id, playerId: action.playerId, name: s.players[seat].name, text, at: action.now };
+      return { ...s, chat: [...chat, msg].slice(-CHAT_HISTORY) };
+    }
+
     case "restart": {
       requireHost(s, action.playerId);
       if (s.phase !== "reveal" && s.phase !== "ended") throw new GameError("WRONG_PHASE");
@@ -335,6 +348,7 @@ export function toPlayerView(state: RoomState, playerId: string, now: number): P
     answeredCount: inRound ? players.filter((p) => p.answered).length : 0,
     total: n,
     reveal,
+    chat: state.chat ?? [],
   };
 }
 
